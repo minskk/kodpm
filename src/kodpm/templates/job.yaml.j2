@@ -141,6 +141,23 @@ spec:
             - name: dumps
               mountPath: /dumps
       {% elif action in ["install", "update"] %}
+      {% if pip_req_enabled %}
+      initContainers:
+        - name: pip-req
+          image: {{ odoo_image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "/scripts/pip-req.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: python-req
+              mountPath: /opt/kodpm
+              readOnly: true
+            - name: pip-packages
+              mountPath: /pip-packages
+      {% endif %}
       containers:
         - name: modules
           image: {{ odoo_image }}
@@ -168,6 +185,10 @@ spec:
               value: {{ action | quote }}
             - name: MODULES
               value: {{ modules | quote }}
+            {% if pip_req_enabled %}
+            - name: PYTHONPATH
+              value: /pip-packages
+            {% endif %}
           volumeMounts:
             - name: scripts
               mountPath: /scripts
@@ -178,6 +199,10 @@ spec:
               mountPath: {{ data_dir }}
             - name: addons
               mountPath: /mnt/extra-addons
+            {% if pip_req_enabled %}
+            - name: pip-packages
+              mountPath: /pip-packages
+            {% endif %}
             {% if host_path %}
             - name: developing
               mountPath: /mnt/extra-addons/{{ host_path_name }}
@@ -208,6 +233,13 @@ spec:
         - name: config
           configMap:
             name: {{ config_cm }}
+        {% if pip_req_enabled %}
+        - name: pip-packages
+          emptyDir: {}
+        - name: python-req
+          configMap:
+            name: {{ python_req_cm }}
+        {% endif %}
         {% if host_path %}
         - name: developing
           hostPath:

@@ -17,6 +17,7 @@ spec:
     metadata:
       annotations:
         checksum/config: "{{ .Values.config | toYaml | sha256sum }}"
+        checksum/requirements: "{{ .Values.pythonRequirements | toYaml | sha256sum }}"
       labels:
         {{- include "odoo-instance.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: odoo
@@ -48,6 +49,22 @@ spec:
             - sh
             - -c
             - until pg_isready -h {{ include "odoo-instance.postgresHost" . }} -U {{ .Values.postgres.user }}; do sleep 2; done
+        {{- end }}
+        {{- if include "odoo-instance.pipReqEnabled" . }}
+        - name: pip-req
+          image: {{ include "odoo-instance.odooImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "/scripts/pip-req.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: python-req
+              mountPath: /opt/kodpm
+              readOnly: true
+            - name: pip-packages
+              mountPath: /pip-packages
         {{- end }}
         {{- if .Values.addons.repos }}
         - name: git-sync
@@ -109,6 +126,10 @@ spec:
                   key: db-password
             - name: ODOO_RC
               value: {{ include "odoo-instance.confPath" . | quote }}
+            {{- if include "odoo-instance.pipReqEnabled" . }}
+            - name: PYTHONPATH
+              value: /pip-packages
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -120,6 +141,10 @@ spec:
               mountPath: {{ .Values.dataDir }}
             - name: addons
               mountPath: /mnt/extra-addons
+            {{- if include "odoo-instance.pipReqEnabled" . }}
+            - name: pip-packages
+              mountPath: /pip-packages
+            {{- end }}
             {{- if .Values.addons.hostPath.enabled }}
             - name: developing
               mountPath: /mnt/extra-addons/{{ default "developing" .Values.addons.hostPath.name }}
@@ -188,6 +213,13 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if include "odoo-instance.pipReqEnabled" . }}
+        - name: pip-packages
+          emptyDir: {}
+        - name: python-req
+          configMap:
+            name: {{ include "odoo-instance.fullname" . }}-python-req
+        {{- end }}
         {{- if .Values.addons.hostPath.enabled }}
         - name: developing
           hostPath:

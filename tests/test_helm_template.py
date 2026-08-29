@@ -69,3 +69,54 @@ def test_helm_template_demo(tmp_path: Path):
     assert keys, conf
     dupes = sorted({key for key in keys if keys.count(key) > 1})
     assert not dupes, f"duplicate odoo.conf options: {dupes}\n{conf}"
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm not installed")
+def test_helm_template_pip_req(tmp_path: Path):
+    project = ProjectFiles(Path("examples/demo-17"))
+    values = build_values(project, "local", db_name="odoo")
+    values["pythonRequirements"] = {
+        "enabled": True,
+        "project": "openupgradelib==3.7.0\n",
+        "odoo": "freezegun==1.2.2\n",
+    }
+    values_file = dump_values(values, tmp_path / "values.yaml")
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            release_name(project),
+            str(chart_dir()),
+            "--namespace",
+            "kodpm",
+            "-f",
+            str(values_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    odoo = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "demo-17-odoo"
+    )
+    spec = odoo["spec"]["template"]["spec"]
+    init_names = [item["name"] for item in spec.get("initContainers") or []]
+    assert "pip-req" in init_names
+    env = {item["name"]: item.get("value") for item in spec["containers"][0]["env"]}
+    assert env["PYTHONPATH"] == "/pip-packages"
+    req_cm = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and doc["metadata"]["name"] == "demo-17-python-req"
+    )
+    assert "openupgradelib==3.7.0" in req_cm["data"]["project-requirements.txt"]
+    assert "freezegun==1.2.2" in req_cm["data"]["odoo-requirements.txt"]
+    scripts = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and "pip-req.sh" in (doc.get("data") or {})
+    )
+    assert "pip install --target" in scripts["data"]["pip-req.sh"]

@@ -64,7 +64,7 @@ def clone_or_update(url: str, dest: Path, branch: str) -> None:
     run(["git", "clone", "--progress", "--depth", "1", "--branch", branch, url, str(dest)])
 
 
-def _core_source(project: ProjectFiles) -> tuple[str, str, str] | None:
+def core_source(project: ProjectFiles) -> tuple[str, str, str] | None:
     """Return (name, url, branch) for the platform git, or None."""
     version = project.odoo_version
     if project.odoo_git_link:
@@ -84,13 +84,28 @@ def _core_source(project: ProjectFiles) -> tuple[str, str, str] | None:
     return project.platform_name or parsed["name"], parsed["url"], version
 
 
+def core_source_dir(project: ProjectFiles) -> Path | None:
+    """Directory of the cloned platform core (Odoo or fork), if present."""
+    core = core_source(project)
+    if not core:
+        return None
+    name, _url, branch = core
+    dest = default_data_dir() / cache_dirname(name, branch)
+    if dest.is_dir():
+        return dest
+    link = project.project_dir / name
+    if link.is_dir():
+        return link.resolve()
+    return None
+
+
 def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
     """Clone core and addons into KODPM_DATA_DIR and symlink them in the project root."""
     data = default_data_dir()
     data.mkdir(parents=True, exist_ok=True)
     linked: list[str] = []
 
-    core = _core_source(project)
+    core = core_source(project)
     if core:
         name, url, branch = core
         dest = data / cache_dirname(name, branch)

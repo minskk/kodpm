@@ -14,6 +14,7 @@ PLATFORM_ALIASES = {
 }
 
 DONE_TOKENS = {"готово", "done", "q", "quit", ".", "-", "конец"}
+REQUIREMENTS_TXT = "requirements.txt"
 
 
 def normalize_addon_links(links: list[str], odoo_version: str) -> list[str]:
@@ -117,6 +118,13 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def write_requirements_txt(project_dir: Path) -> Path:
+    path = project_dir / REQUIREMENTS_TXT
+    if not path.exists():
+        path.write_text("", encoding="utf-8")
+    return path
+
+
 def write_project_files(
     project_dir: Path,
     odpm: dict[str, Any],
@@ -127,4 +135,5 @@ def write_project_files(
     settings_path = project_dir / "user_settings.json"
     write_json(odpm_path, odpm)
     write_json(settings_path, user_settings)
+    write_requirements_txt(project_dir)
     return odpm_path, settings_path

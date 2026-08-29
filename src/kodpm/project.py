@@ -109,6 +109,10 @@ class ProjectFiles:
     def values_local_path(self) -> Path:
         return self.project_dir / "values.local.yaml"
 
+    @property
+    def requirements_path(self) -> Path:
+        return self.project_dir / "requirements.txt"
+
     def addon_repos(self) -> list[dict[str, Any]]:
         return parse_dependencies(self.odpm.get("dependencies"))
 

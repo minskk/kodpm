@@ -50,6 +50,32 @@ def test_render_modules_job():
     assert env["MODULE_ACTION"] == "update"
 
 
+def test_render_modules_job_pip_req():
+    values = _demo_values()
+    values["pythonRequirements"] = {
+        "enabled": True,
+        "project": "openupgradelib==3.7.0\n",
+        "odoo": "freezegun==1.2.2\n",
+    }
+    manifest = render_job(
+        "install",
+        values,
+        job_name="demo-17-mods-in-1",
+        namespace="kodpm",
+        release="demo-17",
+        db_name="odoo",
+        modules="base",
+    )
+    job = yaml.safe_load(manifest)
+    spec = job["spec"]["template"]["spec"]
+    assert spec["initContainers"][0]["name"] == "pip-req"
+    env = {item["name"]: item.get("value") for item in spec["containers"][0]["env"]}
+    assert env["PYTHONPATH"] == "/pip-packages"
+    vol_names = {vol["name"] for vol in spec["volumes"]}
+    assert "pip-packages" in vol_names
+    assert "python-req" in vol_names
+
+
 def test_cli_help():
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])

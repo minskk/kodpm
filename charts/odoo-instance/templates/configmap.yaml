@@ -142,3 +142,53 @@ data:
     # Compatible with Odoo 10–19: no --no-http (missing on old series).
     # shellcheck disable=SC2086
     exec "$BIN" --config="$CONF" -d "$DB" $EXTRA --stop-after-init
+
+  pip-req.sh: |
+    #!/bin/sh
+    set -eu
+    DEST="${PIP_TARGET:-/pip-packages}"
+    mkdir -p "$DEST"
+
+    has_lines() {
+      grep -qE '^[[:space:]]*[^#[:space:]]' "$1" 2>/dev/null
+    }
+
+    ensure_pip() {
+      if python3 -m pip --version >/dev/null 2>&1; then
+        return 0
+      fi
+      echo "python3-pip is missing, installing"
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends python3-pip python3-dev gcc
+    }
+
+    install_file() {
+      label="$1"
+      file="$2"
+      if [ ! -f "$file" ] || ! has_lines "$file"; then
+        echo "pip: skip ${label} (empty or missing)"
+        return 0
+      fi
+      echo "pip: install ${label} ($file)"
+      python3 -m pip install --target "$DEST" -r "$file"
+    }
+
+    ensure_pip
+    install_file "odoo core" /opt/kodpm/odoo-requirements.txt
+    install_file "project" /opt/kodpm/project-requirements.txt
+    chmod -R a+rX "$DEST" || true
+{{- if include "odoo-instance.pipReqEnabled" . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-python-req
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+data:
+  project-requirements.txt: |
+    {{- .Values.pythonRequirements.project | default "" | nindent 4 }}
+  odoo-requirements.txt: |
+    {{- .Values.pythonRequirements.odoo | default "" | nindent 4 }}
+{{- end }}

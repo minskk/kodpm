@@ -43,6 +43,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s/%s" .Values.confMount .Values.confName }}
 {{- end }}
 
+{{- define "odoo-instance.pipReqEnabled" -}}
+{{- if and .Values.pythonRequirements .Values.pythonRequirements.enabled }}true{{ end }}
+{{- end }}
+
 {{- define "odoo-instance.addonsPath" -}}
 {{- $paths := list }}
 {{- range .Values.addons.repos }}

@@ -291,6 +291,7 @@ def init_project(
     written = [
         odpm_path.name,
         settings_path.name,
+        project.requirements_path.name,
         project.conf_name,
         project.values_local_path.name,
     ]

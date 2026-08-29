@@ -9,6 +9,8 @@ from kodpm.initproj import (
     build_user_settings,
     normalize_addon_links,
     normalize_platform,
+    write_project_files,
+    write_requirements_txt,
 )
 from kodpm.project import ProjectFiles
 
@@ -92,6 +94,8 @@ def test_init_command_writes_files(tmp_path: Path):
     assert project.init_modules() == ["base", "web", "my_module"]
     assert (tmp_path / "odoo.conf").is_file()
     assert (tmp_path / "values.local.yaml").is_file()
+    assert (tmp_path / "requirements.txt").is_file()
+    assert (tmp_path / "requirements.txt").read_text(encoding="utf-8") == ""
     conf = (tmp_path / "odoo.conf").read_text(encoding="utf-8")
     assert "data_dir =" in conf
     assert conf.lower().count("data_dir") == 1
@@ -131,3 +135,10 @@ def test_user_settings_builder():
     settings = build_user_settings("base, web")
     assert settings["init_modules"] == "base,web"
     assert settings["db_creation_data"]["db_lang"] == "ru_RU"
+
+
+def test_write_requirements_txt_keeps_existing(tmp_path: Path):
+    existing = tmp_path / "requirements.txt"
+    existing.write_text("openupgradelib==3.7.0\n", encoding="utf-8")
+    write_project_files(tmp_path, build_odpm_json("17.0", "odoo", []), build_user_settings("base"))
+    assert write_requirements_txt(tmp_path).read_text(encoding="utf-8") == "openupgradelib==3.7.0\n"

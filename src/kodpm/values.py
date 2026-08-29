@@ -10,7 +10,7 @@ from kodpm.catalog import get_platform, get_version
 from kodpm.layout import compose_conf, load_values_local
 from kodpm.paths import profiles_dir
 from kodpm.project import ProjectFiles
-from kodpm.sources import cache_dirname, default_data_dir
+from kodpm.sources import cache_dirname, core_source_dir, default_data_dir
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -46,6 +46,39 @@ def host_home_path(path: Path) -> str | None:
     except ValueError:
         return None
     return f"/host-home/{rel.as_posix()}"
+
+
+def requirements_has_packages(text: str) -> bool:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return True
+    return False
+
+
+def read_requirements_file(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def python_requirements_values(project: ProjectFiles) -> dict[str, Any]:
+    """Project requirements.txt plus the core clone's root file, if present."""
+    project_text = read_requirements_file(project.requirements_path)
+    extra = project.odpm.get("requirements_txt") or []
+    if isinstance(extra, list) and extra:
+        lines = [str(item).strip() for item in extra if str(item).strip()]
+        if lines:
+            prefix = project_text.rstrip()
+            block = "\n".join(lines)
+            project_text = f"{prefix}\n{block}\n" if prefix else f"{block}\n"
+    core_dir = core_source_dir(project)
+    odoo_text = read_requirements_file(core_dir / "requirements.txt") if core_dir else ""
+    return {
+        "enabled": requirements_has_packages(project_text) or requirements_has_packages(odoo_text),
+        "project": project_text,
+        "odoo": odoo_text,
+    }
 
 
 def local_extra_addon_mounts(project: ProjectFiles) -> list[dict[str, str]]:
@@ -175,6 +208,7 @@ def build_values(
             "python": version.python,
             "odooGitLink": odoo_git,
         },
+        "pythonRequirements": python_requirements_values(project),
     }
 
     if profile == "local":

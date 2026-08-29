@@ -8,6 +8,7 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 |------|--------|
 | `odpm.json` | Source of version, platform, git, addons |
 | `user_settings.json` (or `usersettings.json`) | Modules, admin password, `dev_mode` |
+| `requirements.txt` (project) and core `requirements.txt` | Installed into the Odoo pod on `up` / module jobs (`kodpm init` creates an empty project file) |
 | `.env` (`BACKUP_DIR`, ports, …) | Profile YAML + cluster port mapping (k3d `:80`) |
 | `docker-compose.yml` (generated) | Chart `charts/odoo-instance` |
 | `--init` clone + Dockerfile | `kodpm cluster init` + `kodpm up` (images from catalog or `image` in json) |
@@ -23,6 +24,7 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 | `bin` | Entrypoint binary (`odoo`, or renamed) |
 | `dependencies` | Git addon repos (`url [branch]` or `{name,url,branch}`) |
 | `python_version` / `distro_*` | Recorded; used when you build a fork image |
+| `requirements_txt` | Extra pip lines merged into the project `requirements.txt` |
 
 ## `user_settings.json`
 

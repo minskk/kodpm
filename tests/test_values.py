@@ -3,7 +3,12 @@ from pathlib import Path
 from kodpm.initproj import build_odpm_json, build_user_settings, write_project_files
 from kodpm.project import ProjectFiles
 from kodpm.layout import addons_path_of
-from kodpm.values import build_values, sanitize_release
+from kodpm.values import (
+    build_values,
+    python_requirements_values,
+    requirements_has_packages,
+    sanitize_release,
+)
 
 
 def test_sanitize_release():
@@ -125,3 +130,43 @@ def test_runtime_db_pins_conf(tmp_path: Path):
     assert "list_db = False" in raw
     assert "dbfilter = ^shop$" in raw
     assert values["kodpm"]["runtimeDb"] == "shop"
+
+
+def test_requirements_has_packages():
+    assert requirements_has_packages("openupgradelib==3.7.0\n")
+    assert not requirements_has_packages("")
+    assert not requirements_has_packages("# comment\n\n")
+
+
+def test_python_requirements_from_project_and_core(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "app"
+    data = home / "projects" / "kodpm_data"
+    core = data / "odoo-17.0"
+    project_dir.mkdir(parents=True)
+    core.mkdir(parents=True)
+    (core / "requirements.txt").write_text("freezegun==1.2.2\n", encoding="utf-8")
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
+    write_project_files(
+        project_dir,
+        build_odpm_json("17.0", "odoo", []),
+        build_user_settings("base"),
+    )
+    (project_dir / "requirements.txt").write_text("openupgradelib==3.7.0\n", encoding="utf-8")
+    req = python_requirements_values(ProjectFiles(project_dir))
+    assert req["enabled"] is True
+    assert "openupgradelib==3.7.0" in req["project"]
+    assert "freezegun==1.2.2" in req["odoo"]
+    values = build_values(ProjectFiles(project_dir), "local")
+    assert values["pythonRequirements"]["enabled"] is True
+    assert values["pythonRequirements"]["odoo"] == "freezegun==1.2.2\n"
+
+
+def test_empty_requirements_disabled(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("KODPM_DATA_DIR", str(tmp_path / "missing-data"))
+    write_project_files(tmp_path, build_odpm_json("17.0", "odoo", []), build_user_settings("base"))
+    req = python_requirements_values(ProjectFiles(tmp_path))
+    assert req["enabled"] is False
+    assert req["project"] == ""
+    assert req["odoo"] == ""
