@@ -1,0 +1,15 @@
+{
+  "init_modules": "base,web",
+  "update_modules": "",
+  "db_creation_data": {
+    "db_lang": "en_US",
+    "db_country_code": false,
+    "create_demo": false,
+    "db_default_admin_login": "admin",
+    "db_default_admin_password": "admin"
+  },
+  "dev_mode": "reload,xml",
+  "db_manager_password": "admin",
+  "update_git_repos": false,
+  "clean_git_repos": false
+}

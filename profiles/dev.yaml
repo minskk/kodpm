@@ -1,0 +1,49 @@
+namespace: kodpm-dev
+replicaCount: 1
+
+ingress:
+  enabled: true
+  className: nginx
+  host: odoo-dev.example.com
+  annotations: {}
+
+minio:
+  enabled: false
+
+dump:
+  storage:
+    type: s3
+    bucket: kodpm-dumps
+    s3:
+      endpoint: ""
+      region: us-east-1
+      accessKey: ""
+      secretKey: ""
+      insecure: false
+
+postgres:
+  persistence:
+    size: 40Gi
+
+persistence:
+  filestore:
+    size: 40Gi
+    accessMode: ReadWriteOnce
+  addons:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+config:
+  options:
+    workers: 2
+    proxy_mode: true
+    list_db: true
+    max_cron_threads: 1

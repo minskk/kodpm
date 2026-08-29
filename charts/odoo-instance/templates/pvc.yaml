@@ -1,0 +1,75 @@
+{{- if .Values.persistence.filestore.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-filestore
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: filestore
+spec:
+  accessModes:
+    - {{ .Values.persistence.filestore.accessMode }}
+  {{- if .Values.persistence.filestore.storageClass }}
+  storageClassName: {{ .Values.persistence.filestore.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.filestore.size }}
+{{- end }}
+---
+{{- if and .Values.persistence.addons.enabled .Values.addons.repos }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-addons
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: addons
+spec:
+  accessModes:
+    - {{ .Values.persistence.addons.accessMode }}
+  {{- if .Values.persistence.addons.storageClass }}
+  storageClassName: {{ .Values.persistence.addons.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.addons.size }}
+{{- end }}
+---
+{{- if and .Values.postgres.enabled .Values.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-postgres
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.postgres.persistence.storageClass }}
+  storageClassName: {{ .Values.postgres.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}
+{{- end }}
+---
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-minio
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.minio.persistence.storageClass }}
+  storageClassName: {{ .Values.minio.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.minio.persistence.size }}
+{{- end }}

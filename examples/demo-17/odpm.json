@@ -1,0 +1,9 @@
+{
+  "python_version": "3.10",
+  "distro_name": "debian",
+  "distro_version": "12",
+  "odoo_version": "17.0",
+  "platform_name": "odoo",
+  "dependencies": [],
+  "requirements_txt": []
+}

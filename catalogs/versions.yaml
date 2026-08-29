@@ -1,0 +1,158 @@
+# Odoo Community major versions and the runtime they need.
+# Images are official Docker Hub tags unless a platform override is set.
+
+"10.0":
+  python: "2.7"
+  postgres: "10"
+  distro: "debian"
+  distro_version: "9"
+  image: "odoo:10"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: xmlrpc_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+  notes: "Python 2.7. Official image odoo:10."
+
+"11.0":
+  python: "3.5"
+  postgres: "10"
+  distro: "debian"
+  distro_version: "9"
+  image: "odoo:11"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: xmlrpc_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+  notes: "Last line with optional Python 2. Official image uses Python 3."
+
+"12.0":
+  python: "3.5"
+  postgres: "12"
+  distro: "debian"
+  distro_version: "10"
+  image: "odoo:12"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+
+"13.0":
+  python: "3.6"
+  postgres: "12"
+  distro: "debian"
+  distro_version: "10"
+  image: "odoo:13"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+
+"14.0":
+  python: "3.7"
+  postgres: "12"
+  distro: "debian"
+  distro_version: "10"
+  image: "odoo:14"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+
+"15.0":
+  python: "3.8"
+  postgres: "12"
+  distro: "debian"
+  distro_version: "11"
+  image: "odoo:15"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: longpolling_port
+  probes:
+    type: tcp
+
+"16.0":
+  python: "3.10"
+  postgres: "14"
+  distro: "debian"
+  distro_version: "11"
+  image: "odoo:16"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: gevent_port
+  probes:
+    type: http
+    path: /web/health
+
+"17.0":
+  python: "3.10"
+  postgres: "14"
+  distro: "debian"
+  distro_version: "12"
+  image: "odoo:17"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: gevent_port
+  probes:
+    type: http
+    path: /web/health
+
+"18.0":
+  python: "3.12"
+  postgres: "16"
+  distro: "debian"
+  distro_version: "12"
+  image: "odoo:18"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: gevent_port
+  probes:
+    type: http
+    path: /web/health
+
+"19.0":
+  python: "3.12"
+  postgres: "16"
+  distro: "debian"
+  distro_version: "12"
+  image: "odoo:19"
+  bin: odoo
+  conf_path: /etc/odoo/odoo.conf
+  data_dir: /var/lib/odoo
+  extra_addons: /mnt/extra-addons
+  http_option: http_port
+  longpolling_option: gevent_port
+  probes:
+    type: http
+    path: /web/health

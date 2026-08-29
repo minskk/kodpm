@@ -1,0 +1,42 @@
+# Named platforms: official Community and rebranded forks.
+# A fork is the same protocol (odoo-bin flags, PostgreSQL, filestore)
+# with a different image/git, conf file name and entrypoint.
+
+odoo:
+  platform_name: odoo
+  conf_name: odoo.conf
+  conf_mount: /etc/odoo
+  bin: odoo
+  extra_addons: /mnt/extra-addons
+  image_from_version: true
+  git: https://github.com/odoo/odoo.git
+
+fincomtech:
+  platform_name: fincomtech
+  conf_name: fincomtech.conf
+  conf_mount: /etc/odoo
+  # Rebranded Odoo: binary is often still "odoo"; override in odpm.json if renamed.
+  bin: odoo
+  extra_addons: /mnt/extra-addons
+  image_from_version: false
+  git: ""
+  image:
+    repository: ""
+    tag: ""
+  notes: >
+    Rebranded Odoo fork. Set odoo_git_link and/or image in odpm.json.
+    Conf file is fincomtech.conf (ODOO_RC). Map odoo_version to the
+    upstream series the fork is based on (e.g. 17.0).
+
+custom:
+  platform_name: odoo
+  conf_name: odoo.conf
+  conf_mount: /etc/odoo
+  bin: odoo
+  extra_addons: /mnt/extra-addons
+  image_from_version: false
+  git: ""
+  image:
+    repository: ""
+    tag: ""
+  notes: "Generic fork template. Copy and set platform_name, git, image, bin."

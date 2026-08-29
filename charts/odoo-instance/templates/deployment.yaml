@@ -1,0 +1,216 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-odoo
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: odoo
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "odoo-instance.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: odoo
+  template:
+    metadata:
+      annotations:
+        checksum/config: "{{ .Values.config | toYaml | sha256sum }}"
+      labels:
+        {{- include "odoo-instance.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: odoo
+        kodpm.io/platform: "{{ .Values.platformName }}"
+        kodpm.io/odoo-version: "{{ .Values.odooVersion }}"
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.postgres.enabled }}
+        - name: wait-postgres
+          image: {{ .Values.postgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until pg_isready -h {{ include "odoo-instance.postgresHost" . }} -U {{ .Values.postgres.user }}; do sleep 2; done
+        {{- end }}
+        {{- if .Values.addons.repos }}
+        - name: git-sync
+          image: alpine/git:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/scripts/git-sync.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: addons
+              mountPath: /mnt/extra-addons
+            - name: repos-list
+              mountPath: /tmp/repos.txt
+              subPath: repos.txt
+            {{- if .Values.addons.sshSecretName }}
+            - name: ssh-key
+              mountPath: /ssh
+              readOnly: true
+            {{- end }}
+          env:
+            {{- if .Values.addons.sshSecretName }}
+            - name: SSH_KEY
+              value: /ssh/ssh-privatekey
+            {{- end }}
+        {{- end }}
+      containers:
+        - name: odoo
+          image: {{ include "odoo-instance.odooImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.image.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          args:
+            - {{ .Values.bin | quote }}
+            - --config={{ include "odoo-instance.confPath" . }}
+            {{- if .Values.devMode }}
+            - --dev={{ .Values.devMode }}
+            {{- end }}
+            {{- range .Values.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+            - name: longpolling
+              containerPort: {{ .Values.service.longpollingPort }}
+          env:
+            - name: HOST
+              value: {{ include "odoo-instance.postgresHost" . | quote }}
+            - name: PORT
+              value: {{ .Values.postgres.port | quote }}
+            - name: USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-instance.fullname" . }}-secret
+                  key: db-password
+            - name: ODOO_RC
+              value: {{ include "odoo-instance.confPath" . | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ .Values.confMount }}
+              readOnly: true
+            - name: filestore
+              mountPath: {{ .Values.dataDir }}
+            - name: addons
+              mountPath: /mnt/extra-addons
+            {{- if .Values.addons.hostPath.enabled }}
+            - name: developing
+              mountPath: /mnt/extra-addons/{{ default "developing" .Values.addons.hostPath.name }}
+            {{- end }}
+          {{- if eq .Values.probes.type "http" }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.httpPath }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.httpPath }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- else }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "odoo-instance.fullname" . }}-config
+        - name: scripts
+          configMap:
+            name: {{ include "odoo-instance.fullname" . }}-scripts
+            defaultMode: 0755
+        - name: filestore
+          {{- if .Values.persistence.filestore.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "odoo-instance.fullname" . }}-filestore
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: addons
+          {{- if and .Values.persistence.addons.enabled .Values.addons.repos }}
+          persistentVolumeClaim:
+            claimName: {{ include "odoo-instance.fullname" . }}-addons
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.addons.hostPath.enabled }}
+        - name: developing
+          hostPath:
+            path: {{ .Values.addons.hostPath.path | quote }}
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- if .Values.addons.repos }}
+        - name: repos-list
+          configMap:
+            name: {{ include "odoo-instance.fullname" . }}-repos
+        {{- end }}
+        {{- if .Values.addons.sshSecretName }}
+        - name: ssh-key
+          secret:
+            secretName: {{ .Values.addons.sshSecretName }}
+            defaultMode: 0400
+        {{- end }}
+{{- if .Values.addons.repos }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-repos
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+data:
+  repos.txt: |
+    {{- range .Values.addons.repos }}
+    {{ .name }}|{{ .url }}|{{ default "master" .branch }}|{{ default 1 .depth }}
+    {{- end }}
+{{- end }}

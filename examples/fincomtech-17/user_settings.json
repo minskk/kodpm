@@ -1,0 +1,13 @@
+{
+  "init_modules": "base,web",
+  "update_modules": "",
+  "db_creation_data": {
+    "db_lang": "ru_RU",
+    "db_country_code": "ru",
+    "create_demo": false,
+    "db_default_admin_login": "admin",
+    "db_default_admin_password": "admin"
+  },
+  "dev_mode": "",
+  "db_manager_password": "admin"
+}

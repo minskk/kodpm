@@ -1,0 +1,12 @@
+{
+  "python_version": "3.10",
+  "distro_name": "debian",
+  "distro_version": "12",
+  "odoo_version": "17.0",
+  "platform_name": "fincomtech",
+  "odoo_git_link": "git@example.com:org/fincomtech.git 17.0",
+  "image": "registry.example.com/fincomtech:17.0",
+  "bin": "odoo",
+  "dependencies": [],
+  "requirements_txt": []
+}

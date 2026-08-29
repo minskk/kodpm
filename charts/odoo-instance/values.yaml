@@ -1,0 +1,138 @@
+fullnameOverride: ""
+nameOverride: ""
+
+platform: odoo
+platformName: odoo
+odooVersion: "17.0"
+confName: odoo.conf
+confMount: /etc/odoo
+bin: odoo
+extraAddons: /mnt/extra-addons
+dataDir: /var/lib/odoo
+
+image:
+  repository: odoo
+  tag: "17"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+  command: []
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8069
+  longpollingPort: 8072
+
+ingress:
+  enabled: true
+  className: ""
+  host: odoo.local
+  annotations: {}
+  tls: []
+
+config:
+  options:
+    admin_passwd: admin
+    db_maxconn: 64
+    workers: 0
+    proxy_mode: true
+    list_db: true
+    logfile: False
+    max_cron_threads: 1
+    without_demo: True
+  extra: {}
+
+secrets:
+  dbPassword: odoo
+  adminPassword: admin
+
+postgres:
+  enabled: true
+  image: postgres:14
+  user: odoo
+  database: postgres
+  password: odoo
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+  externalHost: ""
+  port: 5432
+
+persistence:
+  filestore:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  addons:
+    enabled: true
+    size: 4Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+addons:
+  repos: []
+  # - name: oca-web
+  #   url: https://github.com/OCA/web.git
+  #   branch: "17.0"
+  #   depth: 1
+  hostPath:
+    enabled: false
+    name: developing
+    path: ""
+  sshSecretName: ""
+
+modules:
+  init: []
+  update: []
+
+dump:
+  restoreOnStart: false
+  restoreFrom: ""
+  storage:
+    type: minio
+    bucket: kodpm-dumps
+    s3:
+      endpoint: ""
+      region: us-east-1
+      accessKey: ""
+      secretKey: ""
+      insecure: false
+
+minio:
+  enabled: false
+  image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+  mcImage: minio/mc:RELEASE.2024-12-18T23-03-17Z
+  rootUser: kodpm
+  rootPassword: kodpmkodpm
+  persistence:
+    size: 20Gi
+    storageClass: ""
+  bucket: kodpm-dumps
+
+probes:
+  type: http
+  httpPath: /web/health
+  liveness:
+    initialDelaySeconds: 90
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+extraEnv: []
+extraArgs: []
+devMode: ""
+odooUid: 101

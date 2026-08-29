@@ -1,0 +1,42 @@
+namespace: kodpm-test
+replicaCount: 1
+
+ingress:
+  enabled: true
+  className: nginx
+  host: odoo-test.example.com
+  annotations: {}
+
+minio:
+  enabled: true
+
+dump:
+  storage:
+    type: minio
+
+postgres:
+  persistence:
+    size: 20Gi
+
+persistence:
+  filestore:
+    size: 20Gi
+    accessMode: ReadWriteOnce
+  addons:
+    size: 8Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+config:
+  options:
+    workers: 0
+    proxy_mode: true
+    list_db: true
+    max_cron_threads: 1

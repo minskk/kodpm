@@ -1,0 +1,42 @@
+namespace: kodpm
+replicaCount: 1
+
+ingress:
+  enabled: true
+  className: traefik
+  host: odoo.127.0.0.1.nip.io
+  annotations: {}
+
+minio:
+  enabled: true
+
+dump:
+  storage:
+    type: minio
+
+postgres:
+  persistence:
+    size: 8Gi
+
+persistence:
+  filestore:
+    size: 8Gi
+    accessMode: ReadWriteOnce
+  addons:
+    size: 4Gi
+    accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+config:
+  options:
+    workers: 0
+    proxy_mode: true
+    list_db: true
+    max_cron_threads: 1

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kodpm"
+version = "0.1.0"
+description = "Kubernetes environment for Odoo and rebranded forks (local, test, dev)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "kodpm" }]
+dependencies = [
+  "click>=8.1",
+  "PyYAML>=6.0",
+  "Jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+kodpm = "kodpm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kodpm = ["templates/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

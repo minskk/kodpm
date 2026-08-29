@@ -1,0 +1,8 @@
+1. Odoo: http://{{ .Values.ingress.host | default "localhost" }} (port {{ .Values.service.port }} inside the cluster)
+2. PostgreSQL service: {{ include "odoo-instance.postgresHost" . }}:{{ .Values.postgres.port }}
+{{- if .Values.minio.enabled }}
+3. MinIO API: {{ include "odoo-instance.fullname" . }}-minio:9000  bucket={{ .Values.minio.bucket }}
+{{- end }}
+Platform: {{ .Values.platformName }}  version: {{ .Values.odooVersion }}
+Conf: {{ include "odoo-instance.confPath" . }}
+Use kodpm status / kodpm db / kodpm modules after the release is ready.

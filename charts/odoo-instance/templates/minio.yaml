@@ -1,0 +1,120 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-minio
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: ClusterIP
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+    - name: console
+      port: 9001
+      targetPort: console
+  selector:
+    {{- include "odoo-instance.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-minio
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "odoo-instance.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: minio
+  template:
+    metadata:
+      labels:
+        {{- include "odoo-instance.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: minio
+    spec:
+      containers:
+        - name: minio
+          image: {{ .Values.minio.image | quote }}
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-instance.fullname" . }}-secret
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-instance.fullname" . }}-secret
+                  key: minio-root-password
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "odoo-instance.fullname" . }}-minio
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-minio-bucket
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 120
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: {{ .Values.minio.mcImage | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              echo "waiting for minio"
+              i=0
+              until mc alias set local http://{{ include "odoo-instance.fullname" . }}-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                i=$((i+1))
+                if [ "$i" -gt 30 ]; then
+                  exit 1
+                fi
+                sleep 2
+              done
+              mc mb -p "local/{{ .Values.minio.bucket }}" || true
+              mc anonymous set none "local/{{ .Values.minio.bucket }}" || true
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-instance.fullname" . }}-secret
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "odoo-instance.fullname" . }}-secret
+                  key: minio-root-password
+{{- end }}

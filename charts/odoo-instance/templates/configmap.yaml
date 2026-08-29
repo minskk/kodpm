@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-config
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+data:
+  {{ .Values.confName }}: |
+    [options]
+    addons_path = {{ include "odoo-instance.addonsPath" . }}
+    data_dir = {{ .Values.dataDir }}
+    db_host = {{ include "odoo-instance.postgresHost" . }}
+    db_port = {{ .Values.postgres.port }}
+    db_user = {{ .Values.postgres.user }}
+    db_name = False
+    admin_passwd = {{ .Values.secrets.adminPassword }}
+    {{- range $key, $value := .Values.config.options }}
+    {{- if ne $key "admin_passwd" }}
+    {{ $key }} = {{ $value }}
+    {{- end }}
+    {{- end }}
+    {{- range $key, $value := .Values.config.extra }}
+    {{ $key }} = {{ $value }}
+    {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odoo-instance.fullname" . }}-scripts
+  labels:
+    {{- include "odoo-instance.labels" . | nindent 4 }}
+data:
+  git-sync.sh: |
+    #!/bin/sh
+    set -eu
+    ADDONS_ROOT=/mnt/extra-addons
+    mkdir -p "$ADDONS_ROOT"
+    if [ -n "${SSH_KEY:-}" ] && [ -f "$SSH_KEY" ]; then
+      mkdir -p /tmp/.ssh
+      cp "$SSH_KEY" /tmp/.ssh/id_rsa
+      chmod 600 /tmp/.ssh/id_rsa
+      export GIT_SSH_COMMAND="ssh -i /tmp/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    fi
+    if [ ! -f /tmp/repos.txt ]; then
+      echo "no addon repos"
+      exit 0
+    fi
+    while IFS='|' read -r name url branch depth; do
+      [ -z "$name" ] && continue
+      dest="$ADDONS_ROOT/$name"
+      if [ -d "$dest/.git" ]; then
+        git -C "$dest" fetch --depth "${depth:-1}" origin "$branch"
+        git -C "$dest" checkout -B "$branch" "origin/$branch" || git -C "$dest" checkout "$branch"
+      else
+        rm -rf "$dest"
+        git clone --depth "${depth:-1}" --branch "$branch" "$url" "$dest"
+      fi
+    done < /tmp/repos.txt
+    chmod -R a+rX "$ADDONS_ROOT" || true
+
+  backup.sh: |
+    #!/bin/sh
+    set -eu
+    DUMP_NAME="${DUMP_NAME:-odoo-$(date +%Y%m%d-%H%M%S)}"
+    WORKDIR=/tmp/dump
+    mkdir -p "$WORKDIR" /dumps
+    export PGPASSWORD="${PASSWORD:-${PGPASSWORD:-}}"
+    pg_dump -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" -d "$DB_NAME" -Fc -f "$WORKDIR/db.dump"
+    echo "$DB_NAME" > "$WORKDIR/db_name.txt"
+    if [ -d "${DATA_DIR}/filestore/${DB_NAME}" ]; then
+      tar -C "${DATA_DIR}/filestore" -czf "$WORKDIR/filestore.tar.gz" "$DB_NAME"
+    else
+      tar -czf "$WORKDIR/filestore.tar.gz" --files-from /dev/null
+    fi
+    tar -czf "/dumps/${DUMP_NAME}.tar.gz" -C "$WORKDIR" .
+    echo "DUMP_FILE=/dumps/${DUMP_NAME}.tar.gz"
+    echo "${DUMP_NAME}.tar.gz" > /dumps/name.txt
+
+  restore.sh: |
+    #!/bin/sh
+    set -eu
+    SRC="${RESTORE_FILE:-/dumps/archive}"
+    WORKDIR=/tmp/restore
+    mkdir -p "$WORKDIR"
+    export PGPASSWORD="${PASSWORD:-${PGPASSWORD:-}}"
+    if [ ! -f "$SRC" ]; then
+      echo "archive not found: $SRC" >&2
+      exit 1
+    fi
+    if tar -tzf "$SRC" >/dev/null 2>&1; then
+      tar -xzf "$SRC" -C "$WORKDIR"
+    else
+      command -v unzip >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends unzip)
+      unzip -o "$SRC" -d "$WORKDIR"
+    fi
+    DB_NAME="${DB_NAME:-$(cat "$WORKDIR/db_name.txt" 2>/dev/null || echo odoo)}"
+    psql -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" -d postgres -c \
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();" || true
+    dropdb -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" --if-exists "$DB_NAME"
+    createdb -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" "$DB_NAME"
+    if [ -f "$WORKDIR/db.dump" ]; then
+      pg_restore -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" -d "$DB_NAME" --no-owner --role="$USER" "$WORKDIR/db.dump" || true
+    elif [ -f "$WORKDIR/dump.sql" ]; then
+      psql -h "$HOST" -p "${PGPORT:-5432}" -U "$USER" -d "$DB_NAME" -f "$WORKDIR/dump.sql"
+    else
+      echo "no db.dump or dump.sql in archive" >&2
+      exit 1
+    fi
+    mkdir -p "${DATA_DIR}/filestore"
+    if [ -f "$WORKDIR/filestore.tar.gz" ]; then
+      tar -xzf "$WORKDIR/filestore.tar.gz" -C "${DATA_DIR}/filestore"
+    elif [ -d "$WORKDIR/filestore" ]; then
+      rm -rf "${DATA_DIR}/filestore/${DB_NAME}"
+      mkdir -p "${DATA_DIR}/filestore/${DB_NAME}"
+      cp -a "$WORKDIR/filestore/." "${DATA_DIR}/filestore/${DB_NAME}/"
+    fi
+    if [ -n "${ODOO_UID:-}" ]; then
+      chown -R "${ODOO_UID}:${ODOO_UID}" "${DATA_DIR}/filestore" || true
+    fi
+    echo "restored database ${DB_NAME}"
+
+  modules.sh: |
+    #!/bin/sh
+    set -eu
+    CONF="${ODOO_RC:?}"
+    BIN="${ODOO_BIN:-odoo}"
+    DB="${DB_NAME:?}"
+    ACTION="${MODULE_ACTION:-update}"
+    MODULES="${MODULES:?}"
+    if [ "$ACTION" = "install" ]; then
+      EXTRA="-i ${MODULES}"
+    else
+      EXTRA="-u ${MODULES}"
+    fi
+    # Compatible with Odoo 10–19: no --no-http (missing on old series).
+    # shellcheck disable=SC2086
+    exec "$BIN" --config="$CONF" -d "$DB" $EXTRA --stop-after-init

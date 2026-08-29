@@ -1,0 +1,211 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ job_name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: odoo-instance
+    app.kubernetes.io/instance: {{ release }}
+    app.kubernetes.io/managed-by: kodpm
+    kodpm.io/job: {{ action }}
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  activeDeadlineSeconds: {{ deadline }}
+  template:
+    metadata:
+      labels:
+        kodpm.io/job: {{ action }}
+        app.kubernetes.io/instance: {{ release }}
+    spec:
+      restartPolicy: Never
+      {% if action == "backup" %}
+      initContainers:
+        - name: dump
+          image: {{ postgres_image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "/scripts/backup.sh"]
+          env:
+            - name: HOST
+              value: {{ postgres_host | quote }}
+            - name: PGPORT
+              value: {{ postgres_port | quote }}
+            - name: USER
+              value: {{ postgres_user | quote }}
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: db-password
+            - name: DUMP_NAME
+              value: {{ dump_name | quote }}
+            - name: DB_NAME
+              value: {{ db_name | quote }}
+            - name: DATA_DIR
+              value: {{ data_dir | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: filestore
+              mountPath: {{ data_dir }}
+            - name: dumps
+              mountPath: /dumps
+      containers:
+        - name: upload
+          image: {{ mc_image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              NAME=$(cat /dumps/name.txt)
+              mc {{ mc_insecure }} alias set dump "{{ s3_endpoint }}" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+              mc {{ mc_insecure }} mb -p "dump/{{ s3_bucket }}" || true
+              mc {{ mc_insecure }} cp "/dumps/${NAME}" "dump/{{ s3_bucket }}/"
+              echo "uploaded ${NAME}"
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: s3-access-key
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: s3-secret-key
+          volumeMounts:
+            - name: dumps
+              mountPath: /dumps
+      {% elif action == "restore" %}
+      initContainers:
+        - name: download
+          image: {{ mc_image }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mc {{ mc_insecure }} alias set dump "{{ s3_endpoint }}" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+              mc {{ mc_insecure }} cp "dump/{{ s3_bucket }}/{{ restore_from }}" /dumps/archive
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: s3-access-key
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: s3-secret-key
+          volumeMounts:
+            - name: dumps
+              mountPath: /dumps
+      containers:
+        - name: restore
+          image: {{ postgres_image }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command: ["sh", "/scripts/restore.sh"]
+          env:
+            - name: HOST
+              value: {{ postgres_host | quote }}
+            - name: PGPORT
+              value: {{ postgres_port | quote }}
+            - name: USER
+              value: {{ postgres_user | quote }}
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: db-password
+            - name: RESTORE_FILE
+              value: /dumps/archive
+            - name: DB_NAME
+              value: {{ db_name | quote }}
+            - name: DATA_DIR
+              value: {{ data_dir | quote }}
+            - name: ODOO_UID
+              value: {{ odoo_uid | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: filestore
+              mountPath: {{ data_dir }}
+            - name: dumps
+              mountPath: /dumps
+      {% elif action in ["install", "update"] %}
+      containers:
+        - name: modules
+          image: {{ odoo_image }}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "/scripts/modules.sh"]
+          env:
+            - name: HOST
+              value: {{ postgres_host | quote }}
+            - name: PORT
+              value: {{ postgres_port | quote }}
+            - name: USER
+              value: {{ postgres_user | quote }}
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ secret_name }}
+                  key: db-password
+            - name: ODOO_RC
+              value: {{ conf_path | quote }}
+            - name: ODOO_BIN
+              value: {{ bin_name | quote }}
+            - name: DB_NAME
+              value: {{ db_name | quote }}
+            - name: MODULE_ACTION
+              value: {{ action | quote }}
+            - name: MODULES
+              value: {{ modules | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: config
+              mountPath: {{ conf_mount }}
+              readOnly: true
+            - name: filestore
+              mountPath: {{ data_dir }}
+            - name: addons
+              mountPath: /mnt/extra-addons
+            {% if host_path %}
+            - name: developing
+              mountPath: /mnt/extra-addons/{{ host_path_name }}
+            {% endif %}
+      {% endif %}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ scripts_cm }}
+            defaultMode: 0755
+        - name: dumps
+          emptyDir: {}
+        - name: filestore
+          persistentVolumeClaim:
+            claimName: {{ filestore_pvc }}
+        - name: addons
+          {% if addons_pvc %}
+          persistentVolumeClaim:
+            claimName: {{ addons_pvc }}
+          {% else %}
+          emptyDir: {}
+          {% endif %}
+        - name: config
+          configMap:
+            name: {{ config_cm }}
+        {% if host_path %}
+        - name: developing
+          hostPath:
+            path: {{ host_path | quote }}
+            type: DirectoryOrCreate
+        {% endif %}
