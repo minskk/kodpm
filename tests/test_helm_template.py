@@ -41,6 +41,11 @@ def test_helm_template_demo(tmp_path: Path):
     assert "demo-17-odoo" in names
     assert "demo-17-postgres" in names
     assert "demo-17-minio" in names
+    assert "demo-17-minio-bucket" not in names
+    assert not any(
+        (doc.get("metadata") or {}).get("annotations", {}).get("helm.sh/hook")
+        for doc in docs
+    )
 
     conf = next(
         doc["data"]["odoo.conf"]

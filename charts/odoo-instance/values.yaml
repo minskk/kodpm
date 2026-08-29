@@ -105,7 +105,8 @@ dump:
 minio:
   enabled: false
   image: minio/minio:RELEASE.2024-12-18T13-15-44Z
-  mcImage: minio/mc:RELEASE.2024-12-18T23-03-17Z
+  # Official client images live on quay.io; docker.io/minio/mc RELEASE tags are often missing.
+  mcImage: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
   rootUser: kodpm
   rootPassword: kodpmkodpm
   persistence:

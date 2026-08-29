@@ -11,7 +11,7 @@ from kodpm.kube import apply_yaml, delete_job, kubectl, wait_job
 from kodpm.paths import templates_dir
 from kodpm.proc import ToolError
 
-MC_IMAGE = "minio/mc:RELEASE.2024-12-18T23-03-17Z"
+DEFAULT_MC_IMAGE = "quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z"
 
 
 def s3_endpoint(values: dict[str, Any], fullname: str) -> tuple[str, str, bool]:
@@ -43,7 +43,7 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
         "postgres_port": str(postgres.get("port") or 5432),
         "postgres_user": str(postgres.get("user") or "odoo"),
         "odoo_image": odoo_image,
-        "mc_image": MC_IMAGE,
+        "mc_image": (values.get("minio") or {}).get("mcImage") or DEFAULT_MC_IMAGE,
         "mc_insecure": "--insecure" if insecure else "",
         "s3_endpoint": endpoint,
         "s3_bucket": bucket,

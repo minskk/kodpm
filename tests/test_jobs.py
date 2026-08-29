@@ -27,6 +27,8 @@ def test_render_backup_job():
     docs = list(yaml.safe_load_all(manifest))
     assert docs[0]["kind"] == "Job"
     assert docs[0]["spec"]["template"]["spec"]["initContainers"][0]["name"] == "dump"
+    upload = docs[0]["spec"]["template"]["spec"]["containers"][0]
+    assert upload["image"].startswith("quay.io/minio/mc:")
 
 
 def test_render_modules_job():
