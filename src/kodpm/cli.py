@@ -13,13 +13,13 @@ from kodpm.cmutil import apply_configmap_data, get_configmap_data
 from kodpm.helm import helm_status, helm_template, helm_uninstall, helm_upgrade
 from kodpm.iniutil import get_ini_option, set_ini_option
 from kodpm.jobs import render_job, run_job, timestamp_suffix
-from kodpm.kube import exec_in, kubectl, rollout_odoo, scale_odoo
+from kodpm.kube import delete_release_jobs, exec_in, kubectl, rollout_odoo, scale_odoo
 from kodpm.proc import ToolError
 from kodpm.catalog import resolve_odoo_version
 from kodpm.layout import ensure_values_local, sync_project_layout
 from kodpm.initproj import (
     DONE_TOKENS,
-    build_odpm_json,
+    build_kodpm_json,
     build_user_settings,
     known_platforms,
     known_versions,
@@ -27,7 +27,8 @@ from kodpm.initproj import (
     normalize_platform,
     write_project_files,
 )
-from kodpm.project import ProjectFiles, parse_modules
+from kodpm.project import LEGACY_PROJECT_JSON_NAME, PROJECT_JSON_NAME, ProjectFiles, parse_modules
+from kodpm.secrets import prepare_addon_secrets
 from kodpm.sources import sync_project_sources
 from kodpm.values import build_values, dump_values, namespace_of, release_name
 
@@ -88,6 +89,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if ctx.obj["profile"] == "local" and not dry_run and not ctx.obj.get("no_clone"):
         click.echo("Клонирование ядра и addons в kodpm_data…")
         sync_project_sources(_project(ctx), log=click.echo)
+    if ctx.obj["profile"] == "local" and not dry_run:
+        prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _sync_layout(ctx) if not dry_run else _values(ctx)
     values_file = _values_file(values)
     release = _release(ctx)
@@ -97,6 +100,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
         click.echo("---")
         click.echo(helm_template(release, namespace, values_file))
         return
+    if not dry_run:
+        delete_release_jobs(namespace, release)
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
     try:
         helm_upgrade(release, namespace, values_file, wait=wait)
@@ -177,7 +182,7 @@ def cluster_delete(name: str) -> None:
 @click.option("--odoo-version", default=None, help="Odoo/fork series, e.g. 17.0")
 @click.option("--platform", default=None, help="Core name: odoo, fincomtech, …")
 @click.option("--addon", "addons", multiple=True, help="Addon git URL, optionally 'URL branch'. Repeatable.")
-@click.option("--addons-branch", default=None, help="Git branch for addons (written to odpm.json)")
+@click.option("--addons-branch", default=None, help="Git branch for addons (written to kodpm.json)")
 @click.option("--modules", default=None, help="Modules to install, comma-separated")
 @click.option("--image", default=None, help="Container image for a fork (registry/name:tag)")
 @click.option("--odoo-git-link", default=None, help="Git of the platform fork")
@@ -268,14 +273,18 @@ def init_project(
     if admin_password is None:
         admin_password = click.prompt("Пароль admin / менеджера БД", default="admin")
 
-    odpm_path = project_dir / "odpm.json"
+    kodpm_path = project_dir / PROJECT_JSON_NAME
     settings_path = project_dir / "user_settings.json"
-    existing = [path for path in (odpm_path, settings_path) if path.exists()]
+    existing = [
+        path
+        for path in (kodpm_path, project_dir / LEGACY_PROJECT_JSON_NAME, settings_path)
+        if path.exists()
+    ]
     if existing and not overwrite:
         if not click.confirm("Файлы проекта уже есть. Перезаписать?", default=False):
             raise click.Abort()
 
-    odpm = build_odpm_json(
+    odpm = build_kodpm_json(
         odoo_version,
         platform,
         addon_links,
@@ -294,7 +303,7 @@ def init_project(
     project = ProjectFiles(project_dir)
     _sync_layout(ctx, overwrite_conf=overwrite)
     written = [
-        odpm_path.name,
+        kodpm_path.name,
         settings_path.name,
         project.requirements_path.name,
         project.conf_name,
@@ -534,6 +543,8 @@ def modules() -> None:
 
 
 def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
+    if ctx.obj.get("profile") == "local":
+        prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _values(ctx)
     fullname = _fullname(ctx, values)
     namespace = _ns(ctx, values)
@@ -552,6 +563,8 @@ def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
     job_name = f"{fullname}-mods-{action[:2]}-{timestamp_suffix()}"[:63]
     joined = ",".join(module_list)
     click.echo(f"Scaling Odoo down for module {action} ({joined})...")
+    click.echo(f"  kubectl logs -n {namespace} job/{job_name} -c modules -f")
+    delete_release_jobs(namespace, _release(ctx))
     scale_odoo(fullname, namespace, 0)
     try:
         manifest = render_job(
@@ -613,7 +626,7 @@ def exec_cmd(ctx: click.Context) -> None:
 @_PROFILE_OPTION
 @click.pass_context
 def show_values(ctx: click.Context, profile: str | None) -> None:
-    """Print merged Helm values (profile + catalogs + odpm.json)."""
+    """Print merged Helm values (profile + catalogs + kodpm.json)."""
     _apply_profile(ctx, profile)
     click.echo(yaml.safe_dump(_values(ctx), sort_keys=False, allow_unicode=True))
 

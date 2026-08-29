@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from kodpm.catalog import get_platform
 from kodpm.proc import ToolError, run
-from kodpm.project import ProjectFiles, parse_git_link
+from kodpm.project import ProjectFiles, load_json, parse_dependencies, parse_git_link
 
 
 def default_data_dir() -> Path:
@@ -84,6 +85,47 @@ def core_source(project: ProjectFiles) -> tuple[str, str, str] | None:
     return project.platform_name or parsed["name"], parsed["url"], version
 
 
+def addon_odpm_path(project: ProjectFiles, name: str, branch: str) -> Path | None:
+    for path in (
+        default_data_dir() / cache_dirname(name, branch) / "odpm.json",
+        project.project_dir / name / "odpm.json",
+    ):
+        try:
+            if path.is_file():
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def collect_addon_repos(project: ProjectFiles) -> list[dict[str, Any]]:
+    """Project kodpm.json deps plus nested `dependencies` from each addon odpm.json."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    pending = list(project.addon_repos())
+    while pending:
+        repo = pending.pop(0)
+        name = str(repo["name"])
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append(repo)
+        branch = str(repo.get("branch") or project.addons_branch)
+        path = addon_odpm_path(project, name, branch)
+        if not path:
+            continue
+        data = load_json(path)
+        if not data:
+            continue
+        dep_branch = str(data.get("odoo_version") or "").strip() or project.odoo_version
+        for dep in parse_dependencies(data.get("dependencies"), default_branch=dep_branch):
+            dep_name = str(dep["name"])
+            if dep_name in seen or any(str(item["name"]) == dep_name for item in pending):
+                continue
+            pending.append(dep)
+    return out
+
+
 def core_source_dir(project: ProjectFiles) -> Path | None:
     """Directory of the cloned platform core (Odoo or fork), if present."""
     core = core_source(project)
@@ -118,16 +160,22 @@ def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
     else:
         log(f"Git ядра не задан для platform_name={project.platform_name!r}, пропускаю клон ядра.")
 
-    for repo in project.addon_repos():
-        name = str(repo["name"])
-        url = str(repo["url"])
-        branch = str(repo.get("branch") or project.odoo_version)
-        dest = data / cache_dirname(name, branch)
-        log(f"Addons: {url} ({branch}) → {dest}")
-        clone_or_update(url, dest, branch)
-        ensure_readable_tree(dest)
-        ensure_symlink(project.project_dir / name, dest)
-        linked.append(name)
-        log(f"Ссылка: {project.project_dir / name} → {dest}")
+    cloned: set[str] = set()
+    while True:
+        pending = [repo for repo in collect_addon_repos(project) if str(repo["name"]) not in cloned]
+        if not pending:
+            break
+        for repo in pending:
+            name = str(repo["name"])
+            url = str(repo["url"])
+            branch = str(repo.get("branch") or project.odoo_version)
+            dest = data / cache_dirname(name, branch)
+            log(f"Addons: {url} ({branch}) → {dest}")
+            clone_or_update(url, dest, branch)
+            ensure_readable_tree(dest)
+            ensure_symlink(project.project_dir / name, dest)
+            cloned.add(name)
+            linked.append(name)
+            log(f"Ссылка: {project.project_dir / name} → {dest}")
 
     return linked

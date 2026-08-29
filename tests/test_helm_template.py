@@ -128,3 +128,5 @@ def test_helm_template_pip_req(tmp_path: Path):
         if doc.get("kind") == "ConfigMap" and "pip-req.sh" in (doc.get("data") or {})
     )
     assert "pip install --target" in scripts["data"]["pip-req.sh"]
+    assert "--db_password=" in scripts["data"]["modules.sh"]
+    assert "PASSWORD" in scripts["data"]["modules.sh"]

@@ -6,15 +6,17 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 
 | ODPM | kodpm |
 |------|--------|
-| `odpm.json` | Source of version, platform, git, addons |
+| `kodpm.json` (legacy `odpm.json` in the project root) | Source of version, platform, git, addons |
 | `user_settings.json` (or `usersettings.json`) | Modules, admin password, `dev_mode` |
-| `requirements.txt` (project and each addon clone) | Extra pip packages installed into the pod on `up` / module jobs (`kodpm init` creates an empty project file) |
-| Core `requirements.txt` | Installed at runtime only for a fork image; official `odoo:*` already has Community deps |
+| Addon `odpm.json` → `dependencies` | Extra git addons (e.g. `OCA/queue`) cloned and mounted like project deps |
+| Addon `odpm.json` → `scenarios.developer.requirements` | Extra pip packages installed on `up` / module jobs (`requirements.txt` is ignored) |
+| Addon `odpm.json` → `scenarios.developer.odoo_conf.options` | Merged into `odoo.conf` when the key is not already set (`server_wide_modules`, …) |
+| `.kodpm/secrets.json` (or `.odpm/secrets.json`) | Module secrets → `/run/odpm/secrets.json` and generated `*/data/secret.xml` |
 | `.env` (`BACKUP_DIR`, ports, …) | Profile YAML + cluster port mapping (k3d `:80`) |
 | `docker-compose.yml` (generated) | Chart `charts/odoo-instance` |
 | `--init` clone + Dockerfile | `kodpm cluster init` + `kodpm up` (images from catalog or `image` in json) |
 
-## `odpm.json`
+## `kodpm.json`
 
 | Field | Effect |
 |-------|--------|
@@ -26,7 +28,9 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 | `addons_branch` | Default git branch for addons (`kodpm init` asks for it) |
 | `dependencies` | Git addon repos (`url [branch]` or `{name,url,branch}`) |
 | `python_version` / `distro_*` | Recorded; used when you build a fork image |
-| `requirements_txt` | Extra pip lines merged into the project `requirements.txt` |
+| Addon `requirements_txt` or `scenarios.*.requirements` | Pip packages (not the project-root `requirements.txt`) |
+| Addon `dependencies` | Nested addon repos; branch defaults to that addon's `odoo_version` |
+| Addon `scenarios.*.odoo_conf.options` | Extra `odoo.conf` keys, e.g. `server_wide_modules=base,web,queue_job` |
 
 ## `user_settings.json`
 

@@ -15,7 +15,7 @@ fincomtech:
   platform_name: fincomtech
   conf_name: fincomtech.conf
   conf_mount: /etc/odoo
-  # Rebranded Odoo: binary is often still "odoo"; override in odpm.json if renamed.
+  # Rebranded Odoo: binary is often still "odoo"; override in kodpm.json if renamed.
   bin: odoo
   extra_addons: /mnt/extra-addons
   image_from_version: false
@@ -24,7 +24,7 @@ fincomtech:
     repository: ""
     tag: ""
   notes: >
-    Rebranded Odoo fork. Set odoo_git_link and/or image in odpm.json.
+    Rebranded Odoo fork. Set odoo_git_link and/or image in kodpm.json.
     Conf file is fincomtech.conf (ODOO_RC). Map odoo_version to the
     upstream series the fork is based on (e.g. 17.0).
 

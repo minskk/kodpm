@@ -66,6 +66,7 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
         "extra_mounts": host_path_cfg.get("extraMounts") or [],
         "pip_req_enabled": bool((values.get("pythonRequirements") or {}).get("enabled")),
         "python_req_cm": f"{fullname}-python-req",
+        "odpm_secrets_host_path": str((values.get("odpmSecrets") or {}).get("hostPath") or ""),
     }
     env = Environment(
         loader=FileSystemLoader(str(templates_dir())),
@@ -82,6 +83,9 @@ def run_job(manifest: str, job_name: str, namespace: str, timeout: str = "15m") 
     apply_yaml(manifest, namespace)
     try:
         wait_job(job_name, namespace, timeout=timeout)
+    except KeyboardInterrupt:
+        delete_job(job_name, namespace)
+        raise
     except ToolError:
         kubectl("logs", f"job/{job_name}", "-n", namespace, "--all-containers=true", check=False)
         raise

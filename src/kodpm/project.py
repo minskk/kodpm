@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any
 
 
+PROJECT_JSON_NAME = "kodpm.json"
+LEGACY_PROJECT_JSON_NAME = "odpm.json"
+
+
 def load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -13,10 +17,10 @@ def load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def parse_git_link(link: str) -> dict[str, str]:
+def parse_git_link(link: str, default_branch: str = "master") -> dict[str, str]:
     parts = link.split()
     url = parts[0]
-    branch = parts[1] if len(parts) > 1 else "master"
+    branch = parts[1] if len(parts) > 1 else (default_branch or "master")
     name = url.rstrip("/").rsplit("/", 1)[-1]
     if name.endswith(".git"):
         name = name[:-4]
@@ -32,19 +36,20 @@ def parse_modules(value: Any) -> list[str]:
     return [part.strip() for part in str(value).split(",") if part.strip()]
 
 
-def parse_dependencies(raw: Any) -> list[dict[str, Any]]:
+def parse_dependencies(raw: Any, default_branch: str | None = None) -> list[dict[str, Any]]:
     repos: list[dict[str, Any]] = []
     if not raw:
         return repos
+    branch_default = (default_branch or "").strip() or "master"
     if isinstance(raw, dict):
         raw = [raw]
     for item in raw:
         if isinstance(item, str):
-            repos.append(parse_git_link(item))
+            repos.append(parse_git_link(item, default_branch=branch_default))
         elif isinstance(item, dict):
             if "url" in item or "git" in item or "odoo_git_link" in item:
                 url = str(item.get("url") or item.get("git") or item.get("odoo_git_link"))
-                parsed = parse_git_link(url)
+                parsed = parse_git_link(url, default_branch=branch_default)
                 repos.append(
                     {
                         "name": str(item.get("name") or parsed["name"]),
@@ -57,7 +62,7 @@ def parse_dependencies(raw: Any) -> list[dict[str, Any]]:
                 # odpm-style: {"OCA/web": "17.0"} is unusual; skip unknown shapes
                 link = item.get("git_link") or item.get("link")
                 if link:
-                    parsed = parse_git_link(str(link))
+                    parsed = parse_git_link(str(link), default_branch=branch_default)
                     parsed["name"] = str(item.get("name") or parsed["name"])
                     repos.append(parsed)
     return repos
@@ -66,12 +71,19 @@ def parse_dependencies(raw: Any) -> list[dict[str, Any]]:
 class ProjectFiles:
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = project_dir.resolve()
-        self.odpm = load_json(self.project_dir / "odpm.json")
+        self.odpm = load_json(self.project_dir / PROJECT_JSON_NAME)
         if not self.odpm:
-            self.odpm = load_json(self.project_dir / "kodpm.json")
+            self.odpm = load_json(self.project_dir / LEGACY_PROJECT_JSON_NAME)
         self.user_settings = load_json(self.project_dir / "user_settings.json")
         if not self.user_settings:
             self.user_settings = load_json(self.project_dir / "usersettings.json")
+
+    @property
+    def project_json_path(self) -> Path:
+        kodpm_path = self.project_dir / PROJECT_JSON_NAME
+        if kodpm_path.is_file() or not (self.project_dir / LEGACY_PROJECT_JSON_NAME).is_file():
+            return kodpm_path
+        return self.project_dir / LEGACY_PROJECT_JSON_NAME
 
     @property
     def name(self) -> str:
@@ -118,12 +130,8 @@ class ProjectFiles:
         return str(self.odpm.get("addons_branch") or "").strip() or self.odoo_version
 
     def addon_repos(self) -> list[dict[str, Any]]:
-        repos = parse_dependencies(self.odpm.get("dependencies"))
-        default = self.addons_branch
-        for repo in repos:
-            if not str(repo.get("branch") or "").strip():
-                repo["branch"] = default
-        return repos
+        """Repos declared in the project kodpm.json only (not addon odpm.json)."""
+        return parse_dependencies(self.odpm.get("dependencies"), default_branch=self.addons_branch)
 
     def init_modules(self) -> list[str]:
         return parse_modules(self.user_settings.get("init_modules"))

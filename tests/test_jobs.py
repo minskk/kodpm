@@ -48,6 +48,8 @@ def test_render_modules_job():
     env = {item["name"]: item.get("value") for item in container["env"]}
     assert env["MODULES"] == "sale,crm"
     assert env["MODULE_ACTION"] == "update"
+    password = next(item for item in container["env"] if item["name"] == "PASSWORD")
+    assert password["valueFrom"]["secretKeyRef"]["key"] == "db-password"
 
 
 def test_render_modules_job_pip_req():

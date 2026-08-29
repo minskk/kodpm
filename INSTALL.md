@@ -184,17 +184,17 @@ kodpm init
 - версию ядра (10.0–19.0);
 - наименование ядра (`odoo`, `fincomtech`, …);
 - git-репозитории addons (URL; ветку можно дописать в той же строке);
-- ветку addons (по умолчанию серия Odoo, пишется в `odpm.json` как `addons_branch`);
+- ветку addons (по умолчанию серия Odoo, пишется в `kodpm.json` как `addons_branch`);
 - модули для `-i`, язык БД, пароль.
 
 Затем:
 
-1. Пишутся `odpm.json`, `user_settings.json`, пустой `requirements.txt` (пакеты Python для проекта), `odoo.conf` (или `{platform}.conf`) и `values.local.yaml`.
+1. Пишутся `kodpm.json`, `user_settings.json`, пустой `requirements.txt` (пакеты Python для проекта), `odoo.conf` (или `{platform}.conf`) и `values.local.yaml`.
 2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `git@github.com:odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
-3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта.
+3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
 4. Поднимаются кластер k3d (если ещё нет), Helm и модули.
 
-`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Дополнительные пакеты из проектного `requirements.txt` ставятся в под при `kodpm up` и в Job модулей. Официальный образ `odoo:*` уже содержит зависимости ядра; корневой `requirements.txt` клона ставится только у форка.
+`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). В него же попадают `scenarios.developer.odoo_conf.options` из `odpm.json` addons, если ключа ещё нет (например `server_wide_modules`). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Пакеты Python ставятся из `odpm.json` addons (`scenarios.developer.requirements`); файлы `requirements.txt` не читаются.
 
 Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
 

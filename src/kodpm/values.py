@@ -9,8 +9,8 @@ import yaml
 from kodpm.catalog import get_platform, get_version
 from kodpm.layout import compose_conf, load_values_local
 from kodpm.paths import profiles_dir
-from kodpm.project import ProjectFiles
-from kodpm.sources import cache_dirname, core_source_dir, default_data_dir
+from kodpm.project import ProjectFiles, load_json
+from kodpm.sources import addon_odpm_path, cache_dirname, collect_addon_repos, default_data_dir
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -56,24 +56,6 @@ def requirements_has_packages(text: str) -> bool:
     return False
 
 
-def read_requirements_file(path: Path) -> str:
-    if not path.is_file():
-        return ""
-    return path.read_text(encoding="utf-8")
-
-
-def uses_official_odoo_image(project: ProjectFiles) -> bool:
-    """Official Docker Hub `odoo:*` already contains the core requirements.txt."""
-    if project.odpm.get("image"):
-        repo, _tag = _image_parts(str(project.odpm["image"]))
-        return repo == "odoo" or repo.endswith("/odoo")
-    try:
-        platform = get_platform(project.platform_name)
-    except KeyError:
-        return False
-    return bool(platform.get("image_from_version"))
-
-
 def _append_requirements(chunks: list[str], label: str, text: str) -> None:
     if not requirements_has_packages(text):
         return
@@ -81,49 +63,109 @@ def _append_requirements(chunks: list[str], label: str, text: str) -> None:
     chunks.append(f"# {label}\n{body}" if label else body)
 
 
-def collect_addon_requirements(project: ProjectFiles) -> str:
-    """requirements.txt from each cloned addon repo (not the Odoo core tree)."""
-    chunks: list[str] = []
+def requirements_from_addon_odpm(data: dict[str, Any]) -> list[str]:
+    """Pip lines from an addon ODPM manifest (scenarios.*.requirements or requirements_txt)."""
+    lines: list[str] = []
+    extra = data.get("requirements_txt")
+    if isinstance(extra, list):
+        lines.extend(str(item).strip() for item in extra if str(item).strip())
+    scenarios = data.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return lines
+    chosen: Any = None
+    for key in ("developer", "local", "dev"):
+        item = scenarios.get(key)
+        if isinstance(item, dict) and item.get("requirements"):
+            chosen = item.get("requirements")
+            break
+    if chosen is None:
+        for item in scenarios.values():
+            if isinstance(item, dict) and item.get("requirements"):
+                chosen = item.get("requirements")
+                break
+    if isinstance(chosen, list):
+        lines.extend(str(item).strip() for item in chosen if str(item).strip())
+    return lines
+
+
+def iter_addon_odpm(project: ProjectFiles) -> list[tuple[str, dict[str, Any]]]:
+    found: list[tuple[str, dict[str, Any]]] = []
     seen: set[Path] = set()
-    for repo in project.addon_repos():
+    for repo in collect_addon_repos(project):
         name = str(repo["name"])
         branch = str(repo.get("branch") or project.addons_branch)
-        candidates = [
-            default_data_dir() / cache_dirname(name, branch) / "requirements.txt",
-            project.project_dir / name / "requirements.txt",
-        ]
-        for path in candidates:
-            try:
-                resolved = path.resolve()
-            except OSError:
-                continue
-            if resolved in seen or not path.is_file():
-                continue
-            seen.add(resolved)
-            _append_requirements(chunks, f"addons {name}", read_requirements_file(path))
+        path = addon_odpm_path(project, name, branch)
+        if not path:
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        data = load_json(path)
+        if data:
+            found.append((name, data))
+    return found
+
+
+def options_from_addon_odpm(data: dict[str, Any]) -> dict[str, Any]:
+    """odoo_conf.options from an addon ODPM scenario (developer / local / dev)."""
+    scenarios = data.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return {}
+    chosen: Any = None
+    for key in ("developer", "local", "dev"):
+        item = scenarios.get(key)
+        if isinstance(item, dict) and isinstance(item.get("odoo_conf"), dict):
+            chosen = item.get("odoo_conf")
             break
-    return "".join(chunks)
+    if chosen is None:
+        for item in scenarios.values():
+            if isinstance(item, dict) and isinstance(item.get("odoo_conf"), dict):
+                chosen = item.get("odoo_conf")
+                break
+    if not isinstance(chosen, dict):
+        return {}
+    options = chosen.get("options")
+    return dict(options) if isinstance(options, dict) else {}
+
+
+def merge_csv_option(left: Any, right: Any) -> str:
+    parts: list[str] = []
+    for src in (left, right):
+        for item in str(src or "").split(","):
+            item = item.strip()
+            if item and item not in parts:
+                parts.append(item)
+    return ",".join(parts)
+
+
+def addon_odoo_conf_options(project: ProjectFiles) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    for _name, data in iter_addon_odpm(project):
+        extra = options_from_addon_odpm(data)
+        for key, value in extra.items():
+            if key == "server_wide_modules" and key in options:
+                options[key] = merge_csv_option(options[key], value)
+            else:
+                options[key] = value
+    return options
 
 
 def python_requirements_values(project: ProjectFiles) -> dict[str, Any]:
-    """Project + addon extras; core file only when the image is a fork."""
+    """Only addon odpm.json lists; project/core requirements.txt are ignored."""
     chunks: list[str] = []
-    _append_requirements(chunks, "project", read_requirements_file(project.requirements_path))
-    extra = project.odpm.get("requirements_txt") or []
-    if isinstance(extra, list) and extra:
-        lines = [str(item).strip() for item in extra if str(item).strip()]
+    for name, data in iter_addon_odpm(project):
+        lines = requirements_from_addon_odpm(data)
         if lines:
-            _append_requirements(chunks, "odpm.json", "\n".join(lines) + "\n")
-    _append_requirements(chunks, "", collect_addon_requirements(project))
+            _append_requirements(chunks, f"odpm.json {name}", "\n".join(lines) + "\n")
     project_text = "".join(chunks)
-    odoo_text = ""
-    if not uses_official_odoo_image(project):
-        core_dir = core_source_dir(project)
-        odoo_text = read_requirements_file(core_dir / "requirements.txt") if core_dir else ""
     return {
-        "enabled": requirements_has_packages(project_text) or requirements_has_packages(odoo_text),
+        "enabled": requirements_has_packages(project_text),
         "project": project_text,
-        "odoo": odoo_text,
+        "odoo": "",
     }
 
 
@@ -135,7 +177,7 @@ def local_extra_addon_mounts(project: ProjectFiles) -> list[dict[str, str]]:
         mapped = host_home_path(drop_in)
         if mapped:
             mounts.append({"name": "addons", "path": mapped})
-    for repo in project.addon_repos():
+    for repo in collect_addon_repos(project):
         dest = default_data_dir() / cache_dirname(
             str(repo["name"]),
             str(repo.get("branch") or project.odoo_version),
@@ -156,7 +198,7 @@ def build_values(
     profile_values = load_profile(profile)
     version = get_version(project.odoo_version)
     platform_key = project.platform_name
-    # Allow odpm.json platform_name that is a fork not in catalog: use custom + overlay
+    # Allow kodpm.json platform_name that is a fork not in catalog: use custom + overlay
     try:
         platform = get_platform(platform_key)
     except KeyError:
@@ -192,6 +234,11 @@ def build_values(
     }
     if db_name:
         options["dbfilter"] = f"^{db_name}$"
+    for key, value in addon_odoo_conf_options(project).items():
+        if key == "server_wide_modules" and key in options:
+            options[key] = merge_csv_option(options[key], value)
+        else:
+            options[key] = value
 
     conf_name = str(platform.get("conf_name") or f"{platform.get('platform_name', 'odoo')}.conf")
     conf_mount = str(platform.get("conf_mount") or "/etc/odoo")
@@ -236,7 +283,7 @@ def build_values(
             "update": project.update_modules(),
         },
         "addons": {
-            "repos": project.addon_repos(),
+            "repos": collect_addon_repos(project),
             "hostPath": {
                 "enabled": False,
                 "name": "developing",
@@ -255,6 +302,7 @@ def build_values(
             "odooGitLink": odoo_git,
         },
         "pythonRequirements": python_requirements_values(project),
+        "odpmSecrets": {"enabled": False, "hostPath": ""},
     }
 
     if profile == "local":
@@ -270,6 +318,12 @@ def build_values(
             }
         if project.dev_mode():
             values["devMode"] = project.dev_mode()
+        from kodpm.secrets import secrets_runtime_path
+
+        runtime = secrets_runtime_path(project)
+        mapped = host_home_path(runtime) if runtime.is_file() else None
+        if mapped:
+            values["odpmSecrets"] = {"enabled": True, "hostPath": mapped}
 
     merged = deep_merge(values, profile_values)
     namespace = merged.pop("namespace", None)

@@ -5,7 +5,7 @@ from click.testing import CliRunner
 
 from kodpm.cli import cli
 from kodpm.initproj import (
-    build_odpm_json,
+    build_kodpm_json,
     build_user_settings,
     normalize_addon_links,
     normalize_platform,
@@ -39,7 +39,7 @@ def test_normalize_foncomtech_alias():
 
 
 def test_build_odpm_with_addons():
-    data = build_odpm_json(
+    data = build_kodpm_json(
         "17.0",
         "odoo",
         ["https://github.com/OCA/web.git 17.0"],
@@ -50,7 +50,7 @@ def test_build_odpm_with_addons():
     assert data["dependencies"][0]["name"] == "web"
     assert data["dependencies"][0]["branch"] == "17.0"
     assert data["addons_branch"] == "17.0"
-    custom = build_odpm_json(
+    custom = build_kodpm_json(
         "17.0",
         "odoo",
         ["https://github.com/OCA/web.git"],
@@ -61,7 +61,7 @@ def test_build_odpm_with_addons():
 
 
 def test_build_fincomtech():
-    data = build_odpm_json(
+    data = build_kodpm_json(
         "17",
         "fincomtech",
         [],
@@ -100,7 +100,7 @@ def test_init_command_writes_files(tmp_path: Path):
         ],
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
     settings = json.loads((tmp_path / "user_settings.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
     assert odpm["addons_branch"] == "17.0"
@@ -145,7 +145,7 @@ def test_init_accepts_comma_version(tmp_path: Path):
         input="готово\n\n",
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
     assert odpm["addons_branch"] == "17.0"
 
@@ -178,7 +178,7 @@ def test_init_writes_custom_addons_branch(tmp_path: Path):
         ],
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
     assert odpm["addons_branch"] == "main"
     assert odpm["dependencies"][0]["branch"] == "main"
 
@@ -189,8 +189,23 @@ def test_user_settings_builder():
     assert settings["db_creation_data"]["db_lang"] == "ru_RU"
 
 
+def test_legacy_odpm_json_is_read(tmp_path: Path):
+    (tmp_path / "odpm.json").write_text(
+        '{"odoo_version":"16.0","platform_name":"odoo","dependencies":[]}\n',
+        encoding="utf-8",
+    )
+    assert ProjectFiles(tmp_path).odoo_version == "16.0"
+
+
+def test_write_project_files_replaces_legacy_odpm(tmp_path: Path):
+    (tmp_path / "odpm.json").write_text("{}", encoding="utf-8")
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
+    assert (tmp_path / "kodpm.json").is_file()
+    assert not (tmp_path / "odpm.json").exists()
+
+
 def test_write_requirements_txt_keeps_existing(tmp_path: Path):
     existing = tmp_path / "requirements.txt"
     existing.write_text("openupgradelib==3.7.0\n", encoding="utf-8")
-    write_project_files(tmp_path, build_odpm_json("17.0", "odoo", []), build_user_settings("base"))
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
     assert write_requirements_txt(tmp_path).read_text(encoding="utf-8") == "openupgradelib==3.7.0\n"

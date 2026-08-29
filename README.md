@@ -1,6 +1,6 @@
 # kodpm
 
-Kubernetes environment for **Odoo Community 10–19** and rebranded forks (for example Fincomtech). Same idea as [ODPM](https://github.com/aayartsev/odpm): one project description (`odpm.json` + `user_settings.json`), CLI for dumps and module install/update. Runtime is Helm on Kubernetes instead of Docker Compose.
+Kubernetes environment for **Odoo Community 10–19** and rebranded forks (for example Fincomtech). Same idea as [ODPM](https://github.com/aayartsev/odpm): one project description (`kodpm.json` + `user_settings.json`), CLI for dumps and module install/update. Runtime is Helm on Kubernetes instead of Docker Compose.
 
 Profiles: **local** (k3d), **test**, **dev**.
 
@@ -35,7 +35,7 @@ source ~/projects/kodpm/.venv/bin/activate
 kodpm init
 ```
 
-The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos and the **addons branch**, writes `odpm.json` (including `addons_branch` and each dependency `branch`), `user_settings.json`, an empty `requirements.txt`, `odoo.conf` and `values.local.yaml`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs. Extra Python packages come from the project `requirements.txt`; forks also install the core tree's root file (the official `odoo:*` image already has Community deps).
+The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos and the **addons branch**, writes `kodpm.json` (including `addons_branch` and each dependency `branch`), `user_settings.json`, an empty `requirements.txt`, `odoo.conf` and `values.local.yaml`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs. Each addon clone's `odpm.json` also supplies nested git `dependencies`, `scenarios.developer.requirements` (pip; not `requirements.txt`), and `scenarios.developer.odoo_conf.options` (e.g. `server_wide_modules`). Module API keys go in `.kodpm/secrets.json` (or `.odpm/secrets.json`); kodpm writes `*/data/secret.xml` and mounts `/run/odpm/secrets.json`.
 
 ```bash
 kodpm up

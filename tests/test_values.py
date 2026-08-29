@@ -1,10 +1,12 @@
 from pathlib import Path
 
-from kodpm.initproj import build_odpm_json, build_user_settings, write_project_files
+from kodpm.initproj import build_kodpm_json, build_user_settings, write_project_files
 from kodpm.project import ProjectFiles
 from kodpm.layout import addons_path_of
+from kodpm.iniutil import get_ini_option
 from kodpm.values import (
     build_values,
+    options_from_addon_odpm,
     python_requirements_values,
     requirements_has_packages,
     sanitize_release,
@@ -58,7 +60,7 @@ def test_old_version_probe():
 def test_values_local_overlay(tmp_path: Path):
     write_project_files(
         tmp_path,
-        build_odpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
+        build_kodpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
         build_user_settings("base,web"),
     )
     (tmp_path / "values.local.yaml").write_text(
@@ -105,7 +107,7 @@ def test_local_extra_mounts_under_home(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
     write_project_files(
         project_dir,
-        build_odpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
+        build_kodpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
         build_user_settings("base"),
     )
     values = build_values(ProjectFiles(project_dir), "local")
@@ -121,7 +123,7 @@ def test_local_extra_mounts_under_home(tmp_path: Path, monkeypatch):
 def test_runtime_db_pins_conf(tmp_path: Path):
     write_project_files(
         tmp_path,
-        build_odpm_json("17.0", "odoo", []),
+        build_kodpm_json("17.0", "odoo", []),
         build_user_settings("base"),
     )
     values = build_values(ProjectFiles(tmp_path), "test", db_name="shop")
@@ -138,7 +140,7 @@ def test_requirements_has_packages():
     assert not requirements_has_packages("# comment\n\n")
 
 
-def test_python_requirements_from_project_and_core(tmp_path: Path, monkeypatch):
+def test_requirements_txt_files_are_ignored(tmp_path: Path, monkeypatch):
     home = tmp_path / "user"
     project_dir = home / "projects" / "app"
     data = home / "projects" / "kodpm_data"
@@ -150,72 +152,117 @@ def test_python_requirements_from_project_and_core(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
     write_project_files(
         project_dir,
-        build_odpm_json("17.0", "odoo", []),
+        build_kodpm_json("17.0", "odoo", []),
         build_user_settings("base"),
     )
     (project_dir / "requirements.txt").write_text("openupgradelib==3.7.0\n", encoding="utf-8")
     req = python_requirements_values(ProjectFiles(project_dir))
-    assert req["enabled"] is True
-    assert "openupgradelib==3.7.0" in req["project"]
+    assert req["enabled"] is False
+    assert req["project"] == ""
     assert req["odoo"] == ""
-    values = build_values(ProjectFiles(project_dir), "local")
-    assert values["pythonRequirements"]["enabled"] is True
-    assert values["pythonRequirements"]["odoo"] == ""
 
 
-def test_fork_installs_core_requirements(tmp_path: Path, monkeypatch):
-    home = tmp_path / "user"
-    project_dir = home / "projects" / "app"
-    data = home / "projects" / "kodpm_data"
-    core = data / "fincomtech-17.0"
-    project_dir.mkdir(parents=True)
-    core.mkdir(parents=True)
-    (core / "requirements.txt").write_text("freezegun==1.2.2\n", encoding="utf-8")
-    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
-    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
-    write_project_files(
-        project_dir,
-        build_odpm_json(
-            "17.0",
-            "fincomtech",
-            [],
-            image="registry.example.com/fincomtech:17.0",
-            odoo_git_link="git@example.com:org/fincomtech.git 17.0",
-        ),
-        build_user_settings("base"),
-    )
-    (project_dir / "requirements.txt").write_text("openupgradelib==3.7.0\n", encoding="utf-8")
-    req = python_requirements_values(ProjectFiles(project_dir))
-    assert req["enabled"] is True
-    assert "openupgradelib==3.7.0" in req["project"]
-    assert req["odoo"] == "freezegun==1.2.2\n"
-
-
-def test_addon_requirements_txt_collected(tmp_path: Path, monkeypatch):
+def test_addon_odpm_scenario_requirements(tmp_path: Path, monkeypatch):
     home = tmp_path / "user"
     project_dir = home / "projects" / "app"
     data = home / "projects" / "kodpm_data"
     addon = data / "web-17.0"
     project_dir.mkdir(parents=True)
     addon.mkdir(parents=True)
-    (addon / "requirements.txt").write_text("httpx==0.26.0\nujson==5.9.0\n", encoding="utf-8")
+    (addon / "requirements.txt").write_text("ignored-from-txt==1.0\n", encoding="utf-8")
+    (addon / "odpm.json").write_text(
+        '{"scenarios":{"developer":{"requirements":["httpx==0.26.0","zeep[async]==4.2.1"]}}}\n',
+        encoding="utf-8",
+    )
     monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
     monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
     write_project_files(
         project_dir,
-        build_odpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
+        build_kodpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
         build_user_settings("base"),
     )
     req = python_requirements_values(ProjectFiles(project_dir))
     assert req["enabled"] is True
     assert "httpx==0.26.0" in req["project"]
-    assert "ujson==5.9.0" in req["project"]
+    assert "zeep[async]==4.2.1" in req["project"]
+    assert "ignored-from-txt" not in req["project"]
     assert req["odoo"] == ""
+
+
+def test_addon_odpm_odoo_conf_and_nested_deps(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "app"
+    data = home / "projects" / "kodpm_data"
+    addon = data / "digital-autoparts-17.0-dev"
+    project_dir.mkdir(parents=True)
+    addon.mkdir(parents=True)
+    (data / "queue-17.0").mkdir()
+    (data / "web-17.0").mkdir()
+    (addon / "odpm.json").write_text(
+        """
+{
+  "odoo_version": "17.0",
+  "dependencies": ["https://github.com/OCA/queue", "https://github.com/OCA/web"],
+  "scenarios": {
+    "developer": {
+      "odoo_conf": {
+        "options": {
+          "proxy_mode": "True",
+          "server_wide_modules": "base,web,queue_job"
+        }
+      }
+    }
+  }
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
+    write_project_files(
+        project_dir,
+        build_kodpm_json(
+            "17.0",
+            "odoo",
+            ["git@github.com:digital-autoparts/digital-autoparts.git 17.0-dev"],
+            addons_branch="17.0-dev",
+        ),
+        build_user_settings("setup_all"),
+    )
+    values = build_values(ProjectFiles(project_dir), "local")
+    mounts = {item["name"]: item["path"] for item in values["addons"]["hostPath"]["extraMounts"]}
+    assert mounts["digital-autoparts"].endswith("digital-autoparts-17.0-dev")
+    assert mounts["queue"].endswith("queue-17.0")
+    assert mounts["web"].endswith("web-17.0")
+    raw = values["config"]["raw"]
+    assert get_ini_option(raw, "server_wide_modules") == "base,web,queue_job"
+    assert "/mnt/extra-addons/queue" in (get_ini_option(raw, "addons_path") or "")
+    assert values["config"]["options"]["server_wide_modules"] == "base,web,queue_job"
+
+
+def test_options_from_addon_odpm():
+    data = {
+        "scenarios": {
+            "developer": {
+                "odoo_conf": {
+                    "options": {
+                        "proxy_mode": "True",
+                        "server_wide_modules": "base,web,queue_job",
+                    }
+                }
+            }
+        }
+    }
+    assert options_from_addon_odpm(data) == {
+        "proxy_mode": "True",
+        "server_wide_modules": "base,web,queue_job",
+    }
 
 
 def test_empty_requirements_disabled(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("KODPM_DATA_DIR", str(tmp_path / "missing-data"))
-    write_project_files(tmp_path, build_odpm_json("17.0", "odoo", []), build_user_settings("base"))
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
     req = python_requirements_values(ProjectFiles(tmp_path))
     assert req["enabled"] is False
     assert req["project"] == ""

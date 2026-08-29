@@ -47,6 +47,10 @@ secrets:
   dbPassword: odoo
   adminPassword: admin
 
+odpmSecrets:
+  enabled: false
+  hostPath: ""
+
 postgres:
   enabled: true
   image: postgres:14

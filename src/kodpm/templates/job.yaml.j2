@@ -189,6 +189,10 @@ spec:
             - name: PYTHONPATH
               value: /usr/lib/python3/dist-packages:/pip-packages
             {% endif %}
+            {% if odpm_secrets_host_path %}
+            - name: ODPM_SECRETS_PATH
+              value: /run/odpm/secrets.json
+            {% endif %}
           volumeMounts:
             - name: scripts
               mountPath: /scripts
@@ -202,6 +206,11 @@ spec:
             {% if pip_req_enabled %}
             - name: pip-packages
               mountPath: /pip-packages
+            {% endif %}
+            {% if odpm_secrets_host_path %}
+            - name: odpm-secrets
+              mountPath: /run/odpm/secrets.json
+              readOnly: true
             {% endif %}
             {% if host_path %}
             - name: developing
@@ -251,4 +260,10 @@ spec:
             path: {{ mount.path | quote }}
             type: Directory
         {% endfor %}
+        {% endif %}
+        {% if odpm_secrets_host_path %}
+        - name: odpm-secrets
+          hostPath:
+            path: {{ odpm_secrets_host_path | quote }}
+            type: File
         {% endif %}

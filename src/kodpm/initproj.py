@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from kodpm.catalog import get_version, load_platforms, load_versions, normalize_odoo_version
-from kodpm.project import parse_git_link, parse_modules
+from kodpm.project import LEGACY_PROJECT_JSON_NAME, PROJECT_JSON_NAME, parse_git_link, parse_modules
 from kodpm.sources import default_data_dir
 
 PLATFORM_ALIASES = {
@@ -51,7 +51,7 @@ def normalize_platform(name: str) -> str:
     return PLATFORM_ALIASES.get(key, key)
 
 
-def build_odpm_json(
+def build_kodpm_json(
     odoo_version: str,
     platform_name: str,
     addon_links: list[str],
@@ -134,9 +134,15 @@ def write_project_files(
     user_settings: dict[str, Any],
 ) -> tuple[Path, Path]:
     project_dir.mkdir(parents=True, exist_ok=True)
-    odpm_path = project_dir / "odpm.json"
+    kodpm_path = project_dir / PROJECT_JSON_NAME
     settings_path = project_dir / "user_settings.json"
-    write_json(odpm_path, odpm)
+    write_json(kodpm_path, odpm)
     write_json(settings_path, user_settings)
     write_requirements_txt(project_dir)
-    return odpm_path, settings_path
+    legacy = project_dir / LEGACY_PROJECT_JSON_NAME
+    if legacy.is_file():
+        legacy.unlink()
+    return kodpm_path, settings_path
+
+
+build_odpm_json = build_kodpm_json

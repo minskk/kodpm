@@ -128,6 +128,10 @@ spec:
             - name: PYTHONPATH
               value: /usr/lib/python3/dist-packages:/pip-packages
             {{- end }}
+            {{- if and .Values.odpmSecrets.enabled .Values.odpmSecrets.hostPath }}
+            - name: ODPM_SECRETS_PATH
+              value: /run/odpm/secrets.json
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -149,6 +153,11 @@ spec:
               mountPath: /mnt/extra-addons/{{ .name }}
               readOnly: true
             {{- end }}
+            {{- end }}
+            {{- if and .Values.odpmSecrets.enabled .Values.odpmSecrets.hostPath }}
+            - name: odpm-secrets
+              mountPath: /run/odpm/secrets.json
+              readOnly: true
             {{- end }}
           {{- if eq .Values.probes.type "http" }}
           readinessProbe:
@@ -225,6 +234,12 @@ spec:
             path: {{ .path | quote }}
             type: Directory
         {{- end }}
+        {{- end }}
+        {{- if and .Values.odpmSecrets.enabled .Values.odpmSecrets.hostPath }}
+        - name: odpm-secrets
+          hostPath:
+            path: {{ .Values.odpmSecrets.hostPath | quote }}
+            type: File
         {{- end }}
         {{- if .Values.addons.repos }}
         - name: repos-list

@@ -12,7 +12,34 @@ def apply_yaml(manifest: str, namespace: str) -> None:
 
 
 def delete_job(name: str, namespace: str) -> None:
-    kubectl("delete", "job", name, "-n", namespace, "--ignore-not-found", check=False)
+    kubectl("delete", "job", name, "-n", namespace, "--ignore-not-found", "--wait=true", check=False)
+
+
+def delete_jobs_by_labels(namespace: str, labels: dict[str, str]) -> None:
+    selector = ",".join(f"{key}={value}" for key, value in labels.items())
+    kubectl(
+        "delete",
+        "job",
+        "-n",
+        namespace,
+        "-l",
+        selector,
+        "--ignore-not-found",
+        "--wait=true",
+        check=False,
+    )
+
+
+def delete_release_jobs(namespace: str, release: str, actions: tuple[str, ...] = ("install", "update")) -> None:
+    """Stop leftover module Jobs so they cannot write the same DB as a new Job or the Odoo pod."""
+    for action in actions:
+        delete_jobs_by_labels(
+            namespace,
+            {
+                "app.kubernetes.io/instance": release,
+                "kodpm.io/job": action,
+            },
+        )
 
 
 def wait_job(name: str, namespace: str, timeout: str = "15m") -> None:
@@ -28,16 +55,15 @@ def scale_odoo(fullname: str, namespace: str, replicas: int) -> None:
         namespace,
         f"--replicas={replicas}",
     )
-    if replicas > 0:
-        kubectl(
-            "rollout",
-            "status",
-            f"deploy/{fullname}-odoo",
-            "-n",
-            namespace,
-            "--timeout=180s",
-            check=False,
-        )
+    kubectl(
+        "rollout",
+        "status",
+        f"deploy/{fullname}-odoo",
+        "-n",
+        namespace,
+        "--timeout=180s",
+        check=False,
+    )
 
 
 def rollout_odoo(fullname: str, namespace: str) -> None:

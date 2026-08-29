@@ -18,3 +18,4 @@ venv/
 *.swp
 charts/odoo-instance/charts/
 charts/odoo-instance/Chart.lock
+readme

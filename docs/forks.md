@@ -7,12 +7,12 @@ A fork is treated as Odoo with a different image, conf file name, and optional b
 `catalogs/platforms.yaml`:
 
 - `odoo` — official Community, image from `catalogs/versions.yaml`
-- `fincomtech` — rebranded fork; set `image` and/or `odoo_git_link` in `odpm.json`
+- `fincomtech` — rebranded fork; set `image` and/or `odoo_git_link` in `kodpm.json`
 - `custom` — template for any other rename
 
 `odoo_version` must be the **upstream series** the fork is based on (`17.0`, not a marketing name). That selects PostgreSQL, Python, and health probes.
 
-## `odpm.json` for Fincomtech
+## `kodpm.json` for Fincomtech
 
 ```json
 {

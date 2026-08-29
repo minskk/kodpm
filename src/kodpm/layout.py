@@ -4,7 +4,7 @@ from typing import Any
 
 import yaml
 
-from kodpm.iniutil import set_ini_option
+from kodpm.iniutil import get_ini_option, set_ini_option
 from kodpm.project import ProjectFiles
 
 VALUES_LOCAL_NAME = "values.local.yaml"
@@ -110,6 +110,16 @@ def compose_conf(project: ProjectFiles, values: dict[str, Any]) -> str:
             if key == "admin_passwd" and "admin_passwd" in content:
                 continue
             content = set_ini_option(content, key, value)
+        skip = set(reserved) | {"admin_passwd"}
+        options = (values.get("config") or {}).get("options") or {}
+        extra = (values.get("config") or {}).get("extra") or {}
+        for source in (options, extra):
+            for key, value in source.items():
+                if key in skip:
+                    continue
+                if get_ini_option(content, key) is not None:
+                    continue
+                content = set_ini_option(content, key, format_ini_value(value))
         return content if content.endswith("\n") else content + "\n"
     return render_conf_from_values(values)
 

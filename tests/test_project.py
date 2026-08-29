@@ -22,3 +22,12 @@ def test_parse_dependencies_mixed():
     assert len(repos) == 2
     assert repos[0]["name"] == "server-tools"
     assert repos[1]["url"].endswith("web.git")
+
+
+def test_parse_dependencies_url_only_uses_default_branch():
+    repos = parse_dependencies(
+        ["https://github.com/OCA/queue", "https://github.com/OCA/web"],
+        default_branch="17.0",
+    )
+    assert [repo["name"] for repo in repos] == ["queue", "web"]
+    assert all(repo["branch"] == "17.0" for repo in repos)

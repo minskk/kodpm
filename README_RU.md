@@ -1,6 +1,6 @@
 # kodpm
 
-Kubernetes-среда для **Odoo Community 10–19** и переименованных форков (например Fincomtech). Та же идея, что у [ODPM](https://github.com/aayartsev/odpm): одно описание проекта (`odpm.json` + `user_settings.json`), CLI для дампов и установки/обновления модулей. Вместо Docker Compose — Helm в Kubernetes.
+Kubernetes-среда для **Odoo Community 10–19** и переименованных форков (например Fincomtech). Та же идея, что у [ODPM](https://github.com/aayartsev/odpm): одно описание проекта (`kodpm.json` + `user_settings.json`), CLI для дампов и установки/обновления модулей. Вместо Docker Compose — Helm в Kubernetes.
 
 Профили: **local** (k3d), **test**, **dev**.
 
@@ -37,7 +37,7 @@ source ~/projects/kodpm/.venv/bin/activate
 kodpm init
 ```
 
-Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons и **ветку addons**, запишет `odpm.json` (в том числе `addons_branch` и `branch` у каждой зависимости), `user_settings.json`, пустой `requirements.txt`, `odoo.conf` и `values.local.yaml`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку. Дополнительные пакеты Python — из `requirements.txt` проекта; у форка также из корневого `requirements.txt` ядра (официальный образ `odoo:*` уже содержит зависимости Community).
+Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons и **ветку addons**, запишет `kodpm.json` (в том числе `addons_branch` и `branch` у каждой зависимости), `user_settings.json`, пустой `requirements.txt`, `odoo.conf` и `values.local.yaml`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку. Из `odpm.json` клона addons берутся вложенные git `dependencies`, пакеты Python (`scenarios.developer.requirements`, не `requirements.txt`) и опции `odoo.conf` (`scenarios.developer.odoo_conf.options`, например `server_wide_modules`). Ключи API — в `.kodpm/secrets.json` (или `.odpm/secrets.json`); kodpm пишет `*/data/secret.xml` и монтирует `/run/odpm/secrets.json`.
 
 ```bash
 kodpm up
