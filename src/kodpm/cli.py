@@ -15,8 +15,17 @@ from kodpm.iniutil import get_ini_option, set_ini_option
 from kodpm.jobs import render_job, run_job, timestamp_suffix
 from kodpm.kube import exec_in, kubectl, rollout_odoo, scale_odoo
 from kodpm.proc import ToolError
+from kodpm.catalog import get_version
+from kodpm.initproj import (
+    build_odpm_json,
+    build_user_settings,
+    known_platforms,
+    known_versions,
+    normalize_odoo_version,
+    normalize_platform,
+    write_project_files,
+)
 from kodpm.project import ProjectFiles, parse_modules
-from kodpm.values import build_values, dump_values, namespace_of, release_name
 
 
 def _project(ctx: click.Context) -> ProjectFiles:
@@ -50,6 +59,19 @@ def _fullname(ctx: click.Context, values: dict[str, Any] | None = None) -> str:
 def _values_file(values: dict[str, Any]) -> Path:
     tmp = Path(tempfile.gettempdir()) / f".kodpm-values-{values.get('fullnameOverride', 'instance')}.yaml"
     return dump_values(values, tmp)
+
+
+def _apply_profile(ctx: click.Context, profile: str | None) -> None:
+    if profile:
+        ctx.obj["profile"] = profile.lower()
+
+
+_PROFILE_OPTION = click.option(
+    "--profile",
+    type=click.Choice(["local", "test", "dev"], case_sensitive=False),
+    default=None,
+    help="local, test or dev (same as global kodpm --profile … <command>)",
+)
 
 
 @click.group()
@@ -91,7 +113,7 @@ def cluster_init(name: str, host_home: Path | None, api_port: str) -> None:
     require_k3d()
     click.echo(f"Creating k3d cluster {name} (or reusing if it exists)...")
     init_cluster(name, host_home=host_home, api_port=api_port)
-    click.echo("Cluster is ready. Next: kodpm up --profile local")
+    click.echo("Cluster is ready. Next: kodpm --profile local up")
 
 
 @cluster.command("delete")
@@ -104,11 +126,13 @@ def cluster_delete(name: str) -> None:
 
 
 @cli.command()
+@_PROFILE_OPTION
 @click.option("--dry-run", is_flag=True, help="Print Helm template, do not install")
 @click.option("--wait/--no-wait", default=True, show_default=True)
 @click.pass_context
-def up(ctx: click.Context, dry_run: bool, wait: bool) -> None:
+def up(ctx: click.Context, dry_run: bool, wait: bool, profile: str | None) -> None:
     """Install or upgrade the instance (Helm)."""
+    _apply_profile(ctx, profile)
     values = _values(ctx)
     values_file = _values_file(values)
     release = _release(ctx)
@@ -127,18 +151,22 @@ def up(ctx: click.Context, dry_run: bool, wait: bool) -> None:
 
 
 @cli.command()
+@_PROFILE_OPTION
 @click.pass_context
-def down(ctx: click.Context) -> None:
+def down(ctx: click.Context, profile: str | None) -> None:
     """Uninstall the Helm release (PVCs may remain)."""
+    _apply_profile(ctx, profile)
     values = _values(ctx)
     helm_uninstall(_release(ctx), _ns(ctx, values))
     click.echo("Release uninstalled.")
 
 
 @cli.command()
+@_PROFILE_OPTION
 @click.pass_context
-def status(ctx: click.Context) -> None:
+def status(ctx: click.Context, profile: str | None) -> None:
     """Show Helm and workload status."""
+    _apply_profile(ctx, profile)
     values = _values(ctx)
     release = _release(ctx)
     namespace = _ns(ctx, values)
@@ -380,9 +408,11 @@ def exec_cmd(ctx: click.Context) -> None:
 
 
 @cli.command("values")
+@_PROFILE_OPTION
 @click.pass_context
-def show_values(ctx: click.Context) -> None:
+def show_values(ctx: click.Context, profile: str | None) -> None:
     """Print merged Helm values (profile + catalogs + odpm.json)."""
+    _apply_profile(ctx, profile)
     click.echo(yaml.safe_dump(_values(ctx), sort_keys=False, allow_unicode=True))
 
 

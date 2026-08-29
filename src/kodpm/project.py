@@ -67,6 +67,8 @@ class ProjectFiles:
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = project_dir.resolve()
         self.odpm = load_json(self.project_dir / "odpm.json")
+        if not self.odpm:
+            self.odpm = load_json(self.project_dir / "kodpm.json")
         self.user_settings = load_json(self.project_dir / "user_settings.json")
         if not self.user_settings:
             self.user_settings = load_json(self.project_dir / "usersettings.json")

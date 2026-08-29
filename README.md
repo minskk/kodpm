@@ -11,6 +11,8 @@ Profiles: **local** (k3d), **test**, **dev**.
 - Local profile: [k3d](https://k3d.io/) and Docker
 - Project directory under `$HOME` for live addons on local (k3d mounts `$HOME` at `/host-home`)
 
+Step-by-step when packages are missing (Ubuntu/Debian): **[INSTALL.md](INSTALL.md)**.
+
 ## Install
 
 From this repository (catalogs and Helm chart live next to the code):
@@ -27,7 +29,7 @@ If you install the wheel elsewhere, set `KODPM_HOME` to the clone path so CLI ca
 
 ```bash
 kodpm cluster init
-kodpm --project-dir examples/demo-17 up --profile local
+kodpm --project-dir examples/demo-17 --profile local up
 # http://odoo.127.0.0.1.nip.io
 kodpm --project-dir examples/demo-17 status
 ```

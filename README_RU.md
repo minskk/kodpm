@@ -13,6 +13,8 @@ Kubernetes-среда для **Odoo Community 10–19** и переименов�
 - Для профиля local: [k3d](https://k3d.io/) и Docker
 - Каталог проекта должен быть внутри `$HOME`, чтобы на local работали живые addons (k3d монтирует `$HOME` в `/host-home`)
 
+Пошаговая установка при отсутствии пакетов (Ubuntu/Debian): **[INSTALL.md](INSTALL.md)**.
+
 ## Установка
 
 Из этого репозитория (каталоги версий и Helm-чарт лежат рядом с кодом):
@@ -29,7 +31,7 @@ pip install -e ".[dev]"
 
 ```bash
 kodpm cluster init
-kodpm --project-dir examples/demo-17 up --profile local
+kodpm --project-dir examples/demo-17 --profile local up
 # http://odoo.127.0.0.1.nip.io
 kodpm --project-dir examples/demo-17 status
 ```

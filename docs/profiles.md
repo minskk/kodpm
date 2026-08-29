@@ -15,7 +15,7 @@ One Helm chart, three value overlays in `profiles/`.
 
 ```bash
 kodpm cluster init
-kodpm --project-dir examples/demo-17 up --profile local
+kodpm --project-dir examples/demo-17 --profile local up
 ```
 
 k3d publishes host ports 80/443. Open http://odoo.127.0.0.1.nip.io
@@ -27,7 +27,7 @@ The project directory must live under `$HOME` so live addons appear at `/host-ho
 Point kubectl at the target cluster, then:
 
 ```bash
-kodpm --project-dir examples/demo-17 up --profile test
+kodpm --project-dir examples/demo-17 --profile test up
 kodpm --project-dir examples/demo-17 --profile dev up
 ```
 

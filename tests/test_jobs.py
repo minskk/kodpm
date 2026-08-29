@@ -61,3 +61,20 @@ def test_cli_values_demo():
     assert result.exit_code == 0, result.output
     parsed = yaml.safe_load(result.output)
     assert parsed["odooVersion"] == "17.0"
+
+
+def test_up_help_accepts_profile():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["up", "--help"])
+    assert result.exit_code == 0
+    assert "--profile" in result.output
+
+
+def test_values_profile_after_subcommand():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--project-dir", "examples/demo-17", "values", "--profile", "dev"])
+    assert result.exit_code == 0, result.output
+    parsed = yaml.safe_load(result.output)
+    assert parsed["odooVersion"] == "17.0"
+    assert parsed["kodpm"]["profile"] == "dev"
+    assert parsed["kodpm"]["namespace"] == "kodpm-dev"
