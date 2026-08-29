@@ -7,6 +7,7 @@
   "odoo_git_link": "git@example.com:org/fincomtech.git 17.0",
   "image": "registry.example.com/fincomtech:17.0",
   "bin": "odoo",
+  "addons_branch": "17.0",
   "dependencies": [],
   "requirements_txt": []
 }

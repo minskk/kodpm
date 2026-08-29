@@ -8,7 +8,8 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 |------|--------|
 | `odpm.json` | Source of version, platform, git, addons |
 | `user_settings.json` (or `usersettings.json`) | Modules, admin password, `dev_mode` |
-| `requirements.txt` (project) and core `requirements.txt` | Installed into the Odoo pod on `up` / module jobs (`kodpm init` creates an empty project file) |
+| `requirements.txt` (project and each addon clone) | Extra pip packages installed into the pod on `up` / module jobs (`kodpm init` creates an empty project file) |
+| Core `requirements.txt` | Installed at runtime only for a fork image; official `odoo:*` already has Community deps |
 | `.env` (`BACKUP_DIR`, ports, …) | Profile YAML + cluster port mapping (k3d `:80`) |
 | `docker-compose.yml` (generated) | Chart `charts/odoo-instance` |
 | `--init` clone + Dockerfile | `kodpm cluster init` + `kodpm up` (images from catalog or `image` in json) |
@@ -22,6 +23,7 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 | `odoo_git_link` | Fork git (build image with `images/Dockerfile.fork`) |
 | `image` | `repository:tag` if the fork is already built |
 | `bin` | Entrypoint binary (`odoo`, or renamed) |
+| `addons_branch` | Default git branch for addons (`kodpm init` asks for it) |
 | `dependencies` | Git addon repos (`url [branch]` or `{name,url,branch}`) |
 | `python_version` / `distro_*` | Recorded; used when you build a fork image |
 | `requirements_txt` | Extra pip lines merged into the project `requirements.txt` |

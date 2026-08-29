@@ -174,11 +174,14 @@ data:
       python3 -m pip install --target "$DEST" -r "$file"
     }
 
+    if ! has_lines /opt/kodpm/odoo-requirements.txt && ! has_lines /opt/kodpm/project-requirements.txt; then
+      echo "pip: no extra requirements"
+      exit 0
+    fi
     ensure_pip
     install_file "odoo core" /opt/kodpm/odoo-requirements.txt
     install_file "project" /opt/kodpm/project-requirements.txt
     chmod -R a+rX "$DEST" || true
-{{- if include "odoo-instance.pipReqEnabled" . }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -188,7 +191,6 @@ metadata:
     {{- include "odoo-instance.labels" . | nindent 4 }}
 data:
   project-requirements.txt: |
-    {{- .Values.pythonRequirements.project | default "" | nindent 4 }}
+    {{- ((.Values.pythonRequirements).project) | default "" | nindent 4 }}
   odoo-requirements.txt: |
-    {{- .Values.pythonRequirements.odoo | default "" | nindent 4 }}
-{{- end }}
+    {{- ((.Values.pythonRequirements).odoo) | default "" | nindent 4 }}

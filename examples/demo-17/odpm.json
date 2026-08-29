@@ -4,6 +4,7 @@
   "distro_version": "12",
   "odoo_version": "17.0",
   "platform_name": "odoo",
+  "addons_branch": "17.0",
   "dependencies": [],
   "requirements_txt": []
 }

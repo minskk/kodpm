@@ -104,7 +104,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
         click.echo(
             "Helm не дождался Ready. Поды этого релиза:\n"
             f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release}\n"
-            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo --tail=80",
+            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo -c pip-req --tail=80\n"
+            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo -c odoo --tail=80",
             err=True,
         )
         raise
@@ -176,6 +177,7 @@ def cluster_delete(name: str) -> None:
 @click.option("--odoo-version", default=None, help="Odoo/fork series, e.g. 17.0")
 @click.option("--platform", default=None, help="Core name: odoo, fincomtech, …")
 @click.option("--addon", "addons", multiple=True, help="Addon git URL, optionally 'URL branch'. Repeatable.")
+@click.option("--addons-branch", default=None, help="Git branch for addons (written to odpm.json)")
 @click.option("--modules", default=None, help="Modules to install, comma-separated")
 @click.option("--image", default=None, help="Container image for a fork (registry/name:tag)")
 @click.option("--odoo-git-link", default=None, help="Git of the platform fork")
@@ -191,6 +193,7 @@ def init_project(
     odoo_version: str | None,
     platform: str | None,
     addons: tuple[str, ...],
+    addons_branch: str | None,
     modules: str | None,
     image: str | None,
     odoo_git_link: str | None,
@@ -239,8 +242,8 @@ def init_project(
 
     addon_links = list(addons)
     if not addon_links:
-        click.echo("Репозитории addons. Формат: URL или URL и ветка.")
-        click.echo("Пример: git@github.com:org/addons.git 17.0")
+        click.echo("Репозитории addons. Формат: URL (ветка спрашивается отдельно).")
+        click.echo("Можно сразу: git@github.com:org/addons.git 17.0")
         click.echo("Нажмите Enter (или введите «готово») — закончить список.")
         while True:
             line = click.prompt("  addons git", default="готово", show_default=True)
@@ -249,13 +252,14 @@ def init_project(
                 break
             addon_links.append(text)
             click.echo(f"    добавлен {text}")
-        addon_links = normalize_addon_links(addon_links, odoo_version)
-        if addon_links:
-            click.echo("Итого addons: " + "; ".join(addon_links))
-        else:
-            click.echo("Addons не указаны, иду дальше.")
-    else:
-        addon_links = normalize_addon_links(addon_links, odoo_version)
+    if addons_branch is None:
+        addons_branch = click.prompt("Ветка addons", default=odoo_version)
+    addons_branch = str(addons_branch).strip() or odoo_version
+    addon_links = normalize_addon_links(addon_links, addons_branch)
+    if addon_links:
+        click.echo("Итого addons: " + "; ".join(addon_links))
+    elif not addons:
+        click.echo("Addons не указаны, иду дальше.")
 
     if modules is None:
         modules = click.prompt("Модули для установки (-i)", default="base,web")
@@ -277,6 +281,7 @@ def init_project(
         addon_links,
         image=image_val,
         odoo_git_link=git_val,
+        addons_branch=addons_branch,
     )
     settings = build_user_settings(
         modules or "base,web",

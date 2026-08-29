@@ -26,6 +26,11 @@ def test_normalize_addon_links_dedupe_and_default_branch():
     assert len(links) == 1
     assert links[0].endswith(" 17.0")
     assert "digital-autoparts.git" in links[0]
+    custom = normalize_addon_links(
+        ["git@github.com:digital-autoparts/digital-autoparts.git"],
+        "main",
+    )
+    assert custom[0].endswith(" main")
 
 
 def test_normalize_foncomtech_alias():
@@ -44,6 +49,15 @@ def test_build_odpm_with_addons():
     assert data["python_version"] == "3.10"
     assert data["dependencies"][0]["name"] == "web"
     assert data["dependencies"][0]["branch"] == "17.0"
+    assert data["addons_branch"] == "17.0"
+    custom = build_odpm_json(
+        "17.0",
+        "odoo",
+        ["https://github.com/OCA/web.git"],
+        addons_branch="main",
+    )
+    assert custom["addons_branch"] == "main"
+    assert custom["dependencies"][0]["branch"] == "main"
 
 
 def test_build_fincomtech():
@@ -72,6 +86,8 @@ def test_init_command_writes_files(tmp_path: Path):
             "odoo",
             "--addon",
             "https://github.com/OCA/web.git 17.0",
+            "--addons-branch",
+            "17.0",
             "--modules",
             "base,web,my_module",
             "--db-lang",
@@ -87,7 +103,9 @@ def test_init_command_writes_files(tmp_path: Path):
     odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
     settings = json.loads((tmp_path / "user_settings.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
+    assert odpm["addons_branch"] == "17.0"
     assert odpm["dependencies"][0]["url"].endswith("web.git")
+    assert odpm["dependencies"][0]["branch"] == "17.0"
     assert settings["init_modules"] == "base,web,my_module"
     assert settings["db_manager_password"] == "secret"
     project = ProjectFiles(tmp_path)
@@ -124,11 +142,45 @@ def test_init_accepts_comma_version(tmp_path: Path):
             "--no-clone",
             "--yes",
         ],
-        input="готово\n",
+        input="готово\n\n",
     )
     assert result.exit_code == 0, result.output
     odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
+    assert odpm["addons_branch"] == "17.0"
+
+
+def test_init_writes_custom_addons_branch(tmp_path: Path):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--project-dir",
+            str(tmp_path),
+            "init",
+            "--odoo-version",
+            "17.0",
+            "--platform",
+            "odoo",
+            "--addon",
+            "https://github.com/OCA/web.git",
+            "--addons-branch",
+            "main",
+            "--modules",
+            "base",
+            "--db-lang",
+            "ru_RU",
+            "--admin-password",
+            "admin",
+            "--no-up",
+            "--no-clone",
+            "--yes",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
+    assert odpm["addons_branch"] == "main"
+    assert odpm["dependencies"][0]["branch"] == "main"
 
 
 def test_user_settings_builder():

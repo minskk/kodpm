@@ -35,7 +35,7 @@ source ~/projects/kodpm/.venv/bin/activate
 kodpm init
 ```
 
-The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos, writes `odpm.json`, `user_settings.json`, an empty `requirements.txt`, `odoo.conf` and `values.local.yaml`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs. Python packages come from the project `requirements.txt` and the core tree's root `requirements.txt`.
+The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos and the **addons branch**, writes `odpm.json` (including `addons_branch` and each dependency `branch`), `user_settings.json`, an empty `requirements.txt`, `odoo.conf` and `values.local.yaml`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs. Extra Python packages come from the project `requirements.txt`; forks also install the core tree's root file (the official `odoo:*` image already has Community deps).
 
 ```bash
 kodpm up

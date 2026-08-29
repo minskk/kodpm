@@ -187,7 +187,7 @@ spec:
               value: {{ modules | quote }}
             {% if pip_req_enabled %}
             - name: PYTHONPATH
-              value: /pip-packages
+              value: /usr/lib/python3/dist-packages:/pip-packages
             {% endif %}
           volumeMounts:
             - name: scripts

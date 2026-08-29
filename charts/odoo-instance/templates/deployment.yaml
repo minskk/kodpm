@@ -50,7 +50,6 @@ spec:
             - -c
             - until pg_isready -h {{ include "odoo-instance.postgresHost" . }} -U {{ .Values.postgres.user }}; do sleep 2; done
         {{- end }}
-        {{- if include "odoo-instance.pipReqEnabled" . }}
         - name: pip-req
           image: {{ include "odoo-instance.odooImage" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -65,7 +64,6 @@ spec:
               readOnly: true
             - name: pip-packages
               mountPath: /pip-packages
-        {{- end }}
         {{- if .Values.addons.repos }}
         - name: git-sync
           image: alpine/git:latest
@@ -128,7 +126,7 @@ spec:
               value: {{ include "odoo-instance.confPath" . | quote }}
             {{- if include "odoo-instance.pipReqEnabled" . }}
             - name: PYTHONPATH
-              value: /pip-packages
+              value: /usr/lib/python3/dist-packages:/pip-packages
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -141,10 +139,8 @@ spec:
               mountPath: {{ .Values.dataDir }}
             - name: addons
               mountPath: /mnt/extra-addons
-            {{- if include "odoo-instance.pipReqEnabled" . }}
             - name: pip-packages
               mountPath: /pip-packages
-            {{- end }}
             {{- if .Values.addons.hostPath.enabled }}
             - name: developing
               mountPath: /mnt/extra-addons/{{ default "developing" .Values.addons.hostPath.name }}
@@ -213,13 +209,11 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- if include "odoo-instance.pipReqEnabled" . }}
         - name: pip-packages
           emptyDir: {}
         - name: python-req
           configMap:
             name: {{ include "odoo-instance.fullname" . }}-python-req
-        {{- end }}
         {{- if .Values.addons.hostPath.enabled }}
         - name: developing
           hostPath:

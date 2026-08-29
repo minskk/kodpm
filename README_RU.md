@@ -37,7 +37,7 @@ source ~/projects/kodpm/.venv/bin/activate
 kodpm init
 ```
 
-Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons, запишет `odpm.json`, `user_settings.json`, пустой `requirements.txt`, `odoo.conf` и `values.local.yaml`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку. Пакеты Python ставятся из `requirements.txt` проекта и из корневого `requirements.txt` ядра.
+Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons и **ветку addons**, запишет `odpm.json` (в том числе `addons_branch` и `branch` у каждой зависимости), `user_settings.json`, пустой `requirements.txt`, `odoo.conf` и `values.local.yaml`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку. Дополнительные пакеты Python — из `requirements.txt` проекта; у форка также из корневого `requirements.txt` ядра (официальный образ `odoo:*` уже содержит зависимости Community).
 
 ```bash
 kodpm up

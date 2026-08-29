@@ -69,6 +69,14 @@ def test_helm_template_demo(tmp_path: Path):
     assert keys, conf
     dupes = sorted({key for key in keys if keys.count(key) > 1})
     assert not dupes, f"duplicate odoo.conf options: {dupes}\n{conf}"
+    odoo_spec = odoo["spec"]["template"]["spec"]
+    assert "pip-req" in [item["name"] for item in odoo_spec.get("initContainers") or []]
+    req_cm = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and doc["metadata"]["name"] == "demo-17-python-req"
+    )
+    assert "odoo-requirements.txt" in req_cm["data"]
 
 
 @pytest.mark.skipif(not shutil.which("helm"), reason="helm not installed")
@@ -106,7 +114,7 @@ def test_helm_template_pip_req(tmp_path: Path):
     init_names = [item["name"] for item in spec.get("initContainers") or []]
     assert "pip-req" in init_names
     env = {item["name"]: item.get("value") for item in spec["containers"][0]["env"]}
-    assert env["PYTHONPATH"] == "/pip-packages"
+    assert env["PYTHONPATH"] == "/usr/lib/python3/dist-packages:/pip-packages"
     req_cm = next(
         doc
         for doc in docs

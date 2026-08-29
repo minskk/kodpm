@@ -183,7 +183,8 @@ kodpm init
 
 - версию ядра (10.0–19.0);
 - наименование ядра (`odoo`, `fincomtech`, …);
-- git-репозитории addons (URL или `URL ветка`);
+- git-репозитории addons (URL; ветку можно дописать в той же строке);
+- ветку addons (по умолчанию серия Odoo, пишется в `odpm.json` как `addons_branch`);
 - модули для `-i`, язык БД, пароль.
 
 Затем:
@@ -193,7 +194,7 @@ kodpm init
 3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта.
 4. Поднимаются кластер k3d (если ещё нет), Helm и модули.
 
-`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. `requirements.txt` в корне проекта и `requirements.txt` ядра ставятся в под при `kodpm up` и в Job модулей.
+`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Дополнительные пакеты из проектного `requirements.txt` ставятся в под при `kodpm up` и в Job модулей. Официальный образ `odoo:*` уже содержит зависимости ядра; корневой `requirements.txt` клона ставится только у форка.
 
 Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
 

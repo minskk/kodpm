@@ -113,8 +113,17 @@ class ProjectFiles:
     def requirements_path(self) -> Path:
         return self.project_dir / "requirements.txt"
 
+    @property
+    def addons_branch(self) -> str:
+        return str(self.odpm.get("addons_branch") or "").strip() or self.odoo_version
+
     def addon_repos(self) -> list[dict[str, Any]]:
-        return parse_dependencies(self.odpm.get("dependencies"))
+        repos = parse_dependencies(self.odpm.get("dependencies"))
+        default = self.addons_branch
+        for repo in repos:
+            if not str(repo.get("branch") or "").strip():
+                repo["branch"] = default
+        return repos
 
     def init_modules(self) -> list[str]:
         return parse_modules(self.user_settings.get("init_modules"))

@@ -17,9 +17,9 @@ DONE_TOKENS = {"готово", "done", "q", "quit", ".", "-", "конец"}
 REQUIREMENTS_TXT = "requirements.txt"
 
 
-def normalize_addon_links(links: list[str], odoo_version: str) -> list[str]:
-    """Drop duplicate repo names; default branch to the Odoo series when omitted."""
-    version = normalize_odoo_version(odoo_version)
+def normalize_addon_links(links: list[str], default_branch: str) -> list[str]:
+    """Drop duplicate repo names; use default_branch when the link has no branch."""
+    branch = normalize_odoo_version((default_branch or "").strip() or "master")
     seen: set[str] = set()
     out: list[str] = []
     for raw in links:
@@ -32,7 +32,7 @@ def normalize_addon_links(links: list[str], odoo_version: str) -> list[str]:
             continue
         seen.add(name)
         if len(text.split()) == 1:
-            out.append(f"{parsed['url']} {version}")
+            out.append(f"{parsed['url']} {branch}")
         else:
             out.append(text)
     return out
@@ -59,12 +59,14 @@ def build_odpm_json(
     image: str = "",
     odoo_git_link: str = "",
     bin_name: str = "",
+    addons_branch: str = "",
 ) -> dict[str, Any]:
     version = get_version(odoo_version)
     platform = normalize_platform(platform_name)
+    default_branch = normalize_odoo_version((addons_branch or "").strip() or version.key)
     dependencies = [
         parse_git_link(link)
-        for link in normalize_addon_links(addon_links, version.key)
+        for link in normalize_addon_links(addon_links, default_branch)
     ]
     data: dict[str, Any] = {
         "python_version": version.python,
@@ -72,6 +74,7 @@ def build_odpm_json(
         "distro_version": version.distro_version,
         "odoo_version": version.key,
         "platform_name": platform,
+        "addons_branch": default_branch,
         "dependencies": dependencies,
         "requirements_txt": [],
         "kodpm_data_dir": str(default_data_dir()),

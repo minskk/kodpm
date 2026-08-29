@@ -70,7 +70,7 @@ def test_render_modules_job_pip_req():
     spec = job["spec"]["template"]["spec"]
     assert spec["initContainers"][0]["name"] == "pip-req"
     env = {item["name"]: item.get("value") for item in spec["containers"][0]["env"]}
-    assert env["PYTHONPATH"] == "/pip-packages"
+    assert env["PYTHONPATH"] == "/usr/lib/python3/dist-packages:/pip-packages"
     vol_names = {vol["name"] for vol in spec["volumes"]}
     assert "pip-packages" in vol_names
     assert "python-req" in vol_names
