@@ -82,6 +82,7 @@ addons:
     enabled: false
     name: developing
     path: ""
+    extraPaths: []
   sshSecretName: ""
 
 modules:

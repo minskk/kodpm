@@ -49,7 +49,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $paths = append $paths (printf "/mnt/extra-addons/%s" .name) }}
 {{- end }}
 {{- if .Values.addons.hostPath.enabled }}
-{{- $paths = append $paths (printf "/mnt/extra-addons/%s" (default "developing" .Values.addons.hostPath.name)) }}
+{{- $root := printf "/mnt/extra-addons/%s" (default "developing" .Values.addons.hostPath.name) }}
+{{- $paths = append $paths $root }}
+{{- range .Values.addons.hostPath.extraPaths }}
+{{- $paths = append $paths (printf "%s/%s" $root .) }}
+{{- end }}
 {{- end }}
 {{- if not $paths }}
 {{- .Values.extraAddons | default "/mnt/extra-addons" }}

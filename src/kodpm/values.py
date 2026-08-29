@@ -89,7 +89,6 @@ def build_values(
         "without_demo": not project.create_demo(),
         "db_maxconn": 64,
         "logfile": False,
-        "data_dir": version.data_dir,
     }
 
     conf_name = str(platform.get("conf_name") or f"{platform.get('platform_name', 'odoo')}.conf")
@@ -136,7 +135,7 @@ def build_values(
         },
         "addons": {
             "repos": project.addon_repos(),
-            "hostPath": {"enabled": False, "name": "developing", "path": ""},
+            "hostPath": {"enabled": False, "name": "developing", "path": "", "extraPaths": []},
         },
         "kodpm": {
             "profile": profile,
@@ -151,10 +150,12 @@ def build_values(
     if profile == "local":
         host_path = _host_home_path(project.project_dir)
         if host_path:
+            values["addons"]["repos"] = []
             values["addons"]["hostPath"] = {
                 "enabled": True,
                 "name": "developing",
                 "path": host_path,
+                "extraPaths": [str(repo["name"]) for repo in project.addon_repos()],
             }
         if project.dev_mode():
             values["devMode"] = project.dev_mode()

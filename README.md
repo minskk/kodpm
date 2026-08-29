@@ -25,34 +25,38 @@ pip install -e ".[dev]"
 
 If you install the wheel elsewhere, set `KODPM_HOME` to the clone path so CLI can find `catalogs/`, `profiles/`, and `charts/`.
 
-## Demo (Odoo 17 Community)
+## New project (from the project directory)
+
+kodpm uses the **current directory** as the project. You do not need `--project-dir`.
 
 ```bash
-kodpm cluster init
-kodpm --project-dir examples/demo-17 --profile local up
-# http://odoo.127.0.0.1.nip.io
-kodpm --project-dir examples/demo-17 status
+mkdir ~/projects/kodpm_odoo_test && cd ~/projects/kodpm_odoo_test
+source ~/projects/kodpm/.venv/bin/activate
+kodpm init
 ```
 
-Database manager password is `admin` (see `user_settings.json`).
+The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos, writes `odpm.json` and `user_settings.json`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs.
 
 ```bash
-kodpm --project-dir examples/demo-17 -d odoo modules install base,web
-kodpm --project-dir examples/demo-17 -d odoo db backup --name demo
-kodpm --project-dir examples/demo-17 -d odoo db restore demo.tar.gz
-kodpm --project-dir examples/demo-17 config set workers=0
-kodpm --project-dir examples/demo-17 exec -- --help
+kodpm up
+kodpm status
+kodpm -d odoo modules update
+kodpm -d odoo db backup --name demo
 ```
 
-Preview manifests without a cluster:
+UI: http://odoo.127.0.0.1.nip.io — DB manager password comes from `user_settings.json`.
+
+`--project-dir` is only for calling kodpm while standing in another directory. Existing demo:
 
 ```bash
-kodpm --project-dir examples/demo-17 up --dry-run
+cd /path/to/kodpm/examples/demo-17
+kodpm up --dry-run
 ```
 
 ## CLI
 
 ```
+kodpm init                  # wizard: version, core, addons → files + install
 kodpm cluster init | delete
 kodpm up [--profile local|test|dev] [--dry-run]
 kodpm down
@@ -66,7 +70,7 @@ kodpm modules update [names]
 kodpm exec -- [odoo args...]
 ```
 
-Global flags: `--project-dir`, `--profile`, `-d DATABASE`.
+Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`.
 
 Module jobs run **`--stop-after-init` in a Kubernetes Job**, not on the running Deployment (so liveness probes cannot kill a long `-u`).
 

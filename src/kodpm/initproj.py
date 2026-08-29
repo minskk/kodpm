@@ -6,11 +6,35 @@ from typing import Any
 
 from kodpm.catalog import get_version, load_platforms, load_versions, normalize_odoo_version
 from kodpm.project import parse_git_link, parse_modules
+from kodpm.sources import default_data_dir
 
 PLATFORM_ALIASES = {
     "foncomtech": "fincomtech",
     "fincom": "fincomtech",
 }
+
+DONE_TOKENS = {"готово", "done", "q", "quit", ".", "-", "конец"}
+
+
+def normalize_addon_links(links: list[str], odoo_version: str) -> list[str]:
+    """Drop duplicate repo names; default branch to the Odoo series when omitted."""
+    version = normalize_odoo_version(odoo_version)
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in links:
+        text = str(raw).strip()
+        if not text:
+            continue
+        parsed = parse_git_link(text)
+        name = parsed["name"]
+        if name in seen:
+            continue
+        seen.add(name)
+        if len(text.split()) == 1:
+            out.append(f"{parsed['url']} {version}")
+        else:
+            out.append(text)
+    return out
 
 
 def known_versions() -> list[str]:
@@ -37,7 +61,10 @@ def build_odpm_json(
 ) -> dict[str, Any]:
     version = get_version(odoo_version)
     platform = normalize_platform(platform_name)
-    dependencies = [parse_git_link(link) for link in addon_links if str(link).strip()]
+    dependencies = [
+        parse_git_link(link)
+        for link in normalize_addon_links(addon_links, version.key)
+    ]
     data: dict[str, Any] = {
         "python_version": version.python,
         "distro_name": version.distro,
@@ -46,6 +73,7 @@ def build_odpm_json(
         "platform_name": platform,
         "dependencies": dependencies,
         "requirements_txt": [],
+        "kodpm_data_dir": str(default_data_dir()),
     }
     if odoo_git_link.strip():
         data["odoo_git_link"] = odoo_git_link.strip()

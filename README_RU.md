@@ -27,34 +27,38 @@ pip install -e ".[dev]"
 
 Если ставите wheel в другое место, задайте `KODPM_HOME` на путь к клону, чтобы CLI нашёл `catalogs/`, `profiles/` и `charts/`.
 
-## Демо (Odoo 17 Community)
+## Новый проект (из каталога проекта)
+
+kodpm считает **текущий каталог** проектом. `--project-dir` указывать не нужно.
 
 ```bash
-kodpm cluster init
-kodpm --project-dir examples/demo-17 --profile local up
-# http://odoo.127.0.0.1.nip.io
-kodpm --project-dir examples/demo-17 status
+mkdir ~/projects/kodpm_odoo_test && cd ~/projects/kodpm_odoo_test
+source ~/projects/kodpm/.venv/bin/activate
+kodpm init
 ```
 
-Пароль менеджера баз данных — `admin` (см. `user_settings.json`).
+Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons, запишет `odpm.json` и `user_settings.json`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку.
 
 ```bash
-kodpm --project-dir examples/demo-17 -d odoo modules install base,web
-kodpm --project-dir examples/demo-17 -d odoo db backup --name demo
-kodpm --project-dir examples/demo-17 -d odoo db restore demo.tar.gz
-kodpm --project-dir examples/demo-17 config set workers=0
-kodpm --project-dir examples/demo-17 exec -- --help
+kodpm up
+kodpm status
+kodpm -d odoo modules update
+kodpm -d odoo db backup --name demo
 ```
 
-Предпросмотр манифестов без кластера:
+UI: http://odoo.127.0.0.1.nip.io — пароль менеджера БД из `user_settings.json`.
+
+`--project-dir` нужен, только если запускаете kodpm из другого каталога. Готовое демо:
 
 ```bash
-kodpm --project-dir examples/demo-17 up --dry-run
+cd /path/to/kodpm/examples/demo-17
+kodpm up --dry-run
 ```
 
 ## CLI
 
 ```
+kodpm init                  # мастер: версия, ядро, addons → файлы + установка
 kodpm cluster init | delete
 kodpm up [--profile local|test|dev] [--dry-run]
 kodpm down
@@ -68,7 +72,7 @@ kodpm modules update [names]
 kodpm exec -- [odoo args...]
 ```
 
-Глобальные флаги: `--project-dir`, `--profile`, `-d DATABASE`.
+Необязательные глобальные флаги: `--project-dir` (по умолчанию `.`), `--profile`, `-d DATABASE`.
 
 Установка и обновление модулей выполняются **`--stop-after-init` в Kubernetes Job**, а не на работающем Deployment (чтобы liveness-пробы не убивали долгий `-u`).
 

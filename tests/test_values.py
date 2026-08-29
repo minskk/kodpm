@@ -22,6 +22,9 @@ def test_demo_17_local_values():
     assert values["probes"]["type"] == "http"
     assert values["kodpm"]["namespace"] == "kodpm"
     assert values["devMode"] == "reload,xml"
+    assert values["addons"]["repos"] == []
+    assert values["addons"]["hostPath"]["extraPaths"] == []
+    assert "data_dir" not in values["config"]["options"]
 
 
 def test_fincomtech_values():

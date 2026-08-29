@@ -44,18 +44,33 @@ def load_platforms() -> dict[str, dict[str, Any]]:
 
 
 def normalize_odoo_version(version: str) -> str:
-    version = str(version).strip()
-    if version.isdigit():
-        return f"{version}.0"
-    return version
+    text = str(version).strip().replace(" ", "").replace(",", ".")
+    if text.isdigit():
+        return f"{text}.0"
+    if text.endswith(".") and text[:-1].isdigit():
+        return f"{text}0"
+    return text
 
 
-def get_version(version: str) -> VersionSpec:
+def known_version_keys() -> list[str]:
+    return sorted(load_versions().keys(), key=lambda v: float(v.replace(".0", "")))
+
+
+def resolve_odoo_version(version: str) -> str:
     key = normalize_odoo_version(version)
     versions = load_versions()
     if key not in versions:
-        known = ", ".join(sorted(versions))
-        raise KeyError(f"Unknown Odoo version {version!r}. Known: {known}")
+        known = ", ".join(known_version_keys())
+        raise KeyError(
+            f"Неизвестная версия {version!r} (нормализовано как {key!r}). "
+            f"Допустимы: {known}"
+        )
+    return key
+
+
+def get_version(version: str) -> VersionSpec:
+    key = resolve_odoo_version(version)
+    versions = load_versions()
     raw = versions[key]
     return VersionSpec(
         key=key,

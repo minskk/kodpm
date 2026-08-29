@@ -9,7 +9,7 @@ odoo:
   bin: odoo
   extra_addons: /mnt/extra-addons
   image_from_version: true
-  git: https://github.com/odoo/odoo.git
+  git: git@github.com:odoo/odoo.git
 
 fincomtech:
   platform_name: fincomtech

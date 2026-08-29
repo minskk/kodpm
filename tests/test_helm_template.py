@@ -41,3 +41,19 @@ def test_helm_template_demo(tmp_path: Path):
     assert "demo-17-odoo" in names
     assert "demo-17-postgres" in names
     assert "demo-17-minio" in names
+
+    conf = next(
+        doc["data"]["odoo.conf"]
+        for doc in docs
+        if doc.get("kind") == "ConfigMap" and (doc.get("data") or {}).get("odoo.conf")
+    )
+    keys: list[str] = []
+    for line in conf.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("[") or stripped.startswith(";") or stripped.startswith("#"):
+            continue
+        if "=" in stripped:
+            keys.append(stripped.split("=", 1)[0].strip())
+    assert keys, conf
+    dupes = sorted({key for key in keys if keys.count(key) > 1})
+    assert not dupes, f"duplicate odoo.conf options: {dupes}\n{conf}"

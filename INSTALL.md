@@ -166,22 +166,41 @@ kubectl get nodes
 
 ---
 
-## 8. Первый инстанс (после описания проекта)
+## 8. Новый проект
 
-В каталоге проекта (например `/home/user/projects/kodpm_odoo_test`) нужны `odpm.json` и `user_settings.json`. Каталог должен лежать **внутри `$HOME`**.
+Работать нужно **из каталога проекта** (он должен быть внутри `$HOME`). `--project-dir` не нужен.
+
+Нужен SSH-доступ к GitHub (`git@github.com:…`): ключ в `ssh-agent` или `~/.ssh`.
 
 ```bash
+mkdir -p /home/user/projects/kodpm_odoo_test
+cd /home/user/projects/kodpm_odoo_test
 source /home/user/projects/kodpm/.venv/bin/activate
-kodpm --project-dir /home/user/projects/kodpm_odoo_test --profile local up
-kodpm --project-dir /home/user/projects/kodpm_odoo_test status
+kodpm init
 ```
 
-UI: <http://odoo.127.0.0.1.nip.io> (пароль менеджера БД — из `user_settings.json`, в примере `admin`).
+Мастер спросит:
 
-Демо из репозитория:
+- версию ядра (10.0–19.0);
+- наименование ядра (`odoo`, `fincomtech`, …);
+- git-репозитории addons (URL или `URL ветка`);
+- модули для `-i`, язык БД, пароль.
+
+Затем:
+
+1. Пишутся `odpm.json` и `user_settings.json`.
+2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `git@github.com:odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
+3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта.
+4. Поднимаются кластер k3d (если ещё нет), Helm и модули.
+
+Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
+
+Только файлы, без клона и установки:
 
 ```bash
-kodpm --project-dir /home/user/projects/kodpm/examples/demo-17 --profile local up
+kodpm init --no-up --no-clone
 ```
+
+UI: <http://odoo.127.0.0.1.nip.io>
 
 Дальше: [README_RU.md](README_RU.md), [docs/odpm-mapping.md](docs/odpm-mapping.md).

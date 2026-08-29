@@ -10,6 +10,12 @@ def test_all_series_present():
 def test_normalize():
     assert normalize_odoo_version("17") == "17.0"
     assert normalize_odoo_version("17.0") == "17.0"
+    assert normalize_odoo_version("17,0") == "17.0"
+    assert normalize_odoo_version(" 17,0 ") == "17.0"
+
+
+def test_get_version_accepts_comma():
+    assert get_version("17,0").key == "17.0"
 
 
 def test_version_17():

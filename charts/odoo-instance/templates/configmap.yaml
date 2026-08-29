@@ -14,13 +14,16 @@ data:
     db_user = {{ .Values.postgres.user }}
     db_name = False
     admin_passwd = {{ .Values.secrets.adminPassword }}
+    {{- $reserved := dict "addons_path" true "data_dir" true "db_host" true "db_port" true "db_user" true "db_name" true "admin_passwd" true }}
     {{- range $key, $value := .Values.config.options }}
-    {{- if ne $key "admin_passwd" }}
+    {{- if not (index $reserved $key) }}
     {{ $key }} = {{ $value }}
     {{- end }}
     {{- end }}
     {{- range $key, $value := .Values.config.extra }}
+    {{- if not (index $reserved $key) }}
     {{ $key }} = {{ $value }}
+    {{- end }}
     {{- end }}
 ---
 apiVersion: v1
