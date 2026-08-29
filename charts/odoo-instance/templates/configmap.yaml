@@ -6,6 +6,9 @@ metadata:
     {{- include "odoo-instance.labels" . | nindent 4 }}
 data:
   {{ .Values.confName }}: |
+    {{- if .Values.config.raw }}
+    {{- .Values.config.raw | trim | nindent 4 }}
+    {{- else }}
     [options]
     addons_path = {{ include "odoo-instance.addonsPath" . }}
     data_dir = {{ .Values.dataDir }}
@@ -23,6 +26,7 @@ data:
     {{- range $key, $value := .Values.config.extra }}
     {{- if not (index $reserved $key) }}
     {{ $key }} = {{ $value }}
+    {{- end }}
     {{- end }}
     {{- end }}
 ---

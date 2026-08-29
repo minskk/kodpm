@@ -90,6 +90,12 @@ def test_init_command_writes_files(tmp_path: Path):
     assert settings["db_manager_password"] == "secret"
     project = ProjectFiles(tmp_path)
     assert project.init_modules() == ["base", "web", "my_module"]
+    assert (tmp_path / "odoo.conf").is_file()
+    assert (tmp_path / "values.local.yaml").is_file()
+    conf = (tmp_path / "odoo.conf").read_text(encoding="utf-8")
+    assert "data_dir =" in conf
+    assert conf.lower().count("data_dir") == 1
+    assert "addons_path =" in conf
 
 
 def test_init_accepts_comma_version(tmp_path: Path):

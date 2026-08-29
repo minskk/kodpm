@@ -16,6 +16,7 @@ from kodpm.jobs import render_job, run_job, timestamp_suffix
 from kodpm.kube import exec_in, kubectl, rollout_odoo, scale_odoo
 from kodpm.proc import ToolError
 from kodpm.catalog import resolve_odoo_version
+from kodpm.layout import ensure_values_local, sync_project_layout
 from kodpm.initproj import (
     DONE_TOKENS,
     build_odpm_json,
@@ -43,6 +44,12 @@ def _values(ctx: click.Context, extra: dict[str, Any] | None = None) -> dict[str
         extra=extra,
         db_name=ctx.obj.get("db_name"),
     )
+
+
+def _sync_layout(ctx: click.Context, *, overwrite_conf: bool = False) -> dict[str, Any]:
+    project = _project(ctx)
+    ensure_values_local(project)
+    return sync_project_layout(_project(ctx), _values(ctx), overwrite_conf=overwrite_conf)
 
 
 def _ns(ctx: click.Context, values: dict[str, Any] | None = None) -> str:
@@ -81,7 +88,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if ctx.obj["profile"] == "local" and not dry_run and not ctx.obj.get("no_clone"):
         click.echo("Клонирование ядра и addons в kodpm_data…")
         sync_project_sources(_project(ctx), log=click.echo)
-    values = _values(ctx)
+    values = _sync_layout(ctx) if not dry_run else _values(ctx)
     values_file = _values_file(values)
     release = _release(ctx)
     namespace = _ns(ctx, values)
@@ -159,7 +166,7 @@ def cluster_delete(name: str) -> None:
 @click.option("--odoo-git-link", default=None, help="Git of the platform fork")
 @click.option("--db-lang", default=None, help="Database language, e.g. ru_RU")
 @click.option("--admin-password", default=None, help="Admin / DB manager password")
-@click.option("--no-up", is_flag=True, help="Only write odpm.json and user_settings.json")
+@click.option("--no-up", is_flag=True, help="Only write project files, do not helm up")
 @click.option("--no-clone", is_flag=True, help="Do not clone core/addons into kodpm_data")
 @click.option("--yes", "overwrite", is_flag=True, help="Overwrite existing files without asking")
 @click.pass_context
@@ -178,7 +185,7 @@ def init_project(
     no_clone: bool,
     overwrite: bool,
 ) -> None:
-    """Create odpm.json and user_settings.json in the current directory, then install."""
+    """Create the project layout (json, conf, values.local.yaml, source links), then install."""
     _apply_profile(ctx, profile)
     project_dir = Path(ctx.obj["project_dir"])
     versions = ", ".join(known_versions())
@@ -244,7 +251,8 @@ def init_project(
 
     odpm_path = project_dir / "odpm.json"
     settings_path = project_dir / "user_settings.json"
-    if (odpm_path.exists() or settings_path.exists()) and not overwrite:
+    existing = [path for path in (odpm_path, settings_path) if path.exists()]
+    if existing and not overwrite:
         if not click.confirm("Файлы проекта уже есть. Перезаписать?", default=False):
             raise click.Abort()
 
@@ -263,7 +271,15 @@ def init_project(
         dev_mode="reload,xml" if ctx.obj["profile"] == "local" else "",
     )
     write_project_files(project_dir, odpm, settings)
-    click.echo(f"Записано: {odpm_path.name}, {settings_path.name}")
+    project = ProjectFiles(project_dir)
+    _sync_layout(ctx, overwrite_conf=overwrite)
+    written = [
+        odpm_path.name,
+        settings_path.name,
+        project.conf_name,
+        project.values_local_path.name,
+    ]
+    click.echo("Записано: " + ", ".join(written))
     ctx.obj["no_clone"] = no_clone
     if not no_clone:
         click.echo("Клонирование ядра и addons…")
@@ -335,18 +351,22 @@ def config() -> None:
 @click.pass_context
 def config_get(ctx: click.Context, key: str | None) -> None:
     values = _values(ctx)
-    fullname = _fullname(ctx, values)
-    namespace = _ns(ctx, values)
+    project = _project(ctx)
     conf_name = str(values.get("confName") or "odoo.conf")
-    data = get_configmap_data(f"{fullname}-config", namespace)
-    content = data.get(conf_name, "")
+    if project.conf_path.is_file():
+        content = project.conf_path.read_text(encoding="utf-8")
+    else:
+        content = str((values.get("config") or {}).get("raw") or "")
+        if not content:
+            data = get_configmap_data(f"{_fullname(ctx, values)}-config", _ns(ctx, values))
+            content = data.get(conf_name, "")
     if key:
         found = get_ini_option(content, key)
         if found is None:
             raise click.ClickException(f"Option {key!r} not found in {conf_name}")
         click.echo(found)
         return
-    click.echo(content)
+    click.echo(content, nl=not content.endswith("\n"))
 
 
 @config.command("set")
@@ -355,21 +375,32 @@ def config_get(ctx: click.Context, key: str | None) -> None:
 def config_set(ctx: click.Context, pairs: tuple[str, ...]) -> None:
     """Set options: kodpm config set workers=2 proxy_mode=True"""
     values = _values(ctx)
-    fullname = _fullname(ctx, values)
-    namespace = _ns(ctx, values)
+    project = _project(ctx)
     conf_name = str(values.get("confName") or "odoo.conf")
-    cm_name = f"{fullname}-config"
-    data = get_configmap_data(cm_name, namespace)
-    content = data.get(conf_name, "[options]\n")
+    content = (
+        project.conf_path.read_text(encoding="utf-8")
+        if project.conf_path.is_file()
+        else str((values.get("config") or {}).get("raw") or "[options]\n")
+    )
     for pair in pairs:
         if "=" not in pair:
             raise click.ClickException(f"Expected KEY=VALUE, got {pair!r}")
         option, value = pair.split("=", 1)
         content = set_ini_option(content, option.strip(), value.strip())
-    data[conf_name] = content
-    apply_configmap_data(cm_name, namespace, data)
-    rollout_odoo(fullname, namespace)
-    click.echo(f"Updated {conf_name} and restarted Odoo.")
+    project.conf_path.write_text(content, encoding="utf-8")
+    values = _sync_layout(ctx)
+    content = str(values["config"]["raw"])
+    fullname = _fullname(ctx, values)
+    namespace = _ns(ctx, values)
+    cm_name = f"{fullname}-config"
+    try:
+        data = get_configmap_data(cm_name, namespace)
+        data[conf_name] = content
+        apply_configmap_data(cm_name, namespace, data)
+        rollout_odoo(fullname, namespace)
+        click.echo(f"Updated {project.conf_path.name} and restarted Odoo.")
+    except (ToolError, FileNotFoundError, KeyError):
+        click.echo(f"Updated {project.conf_path.name} (cluster not updated).")
 
 
 @cli.group()

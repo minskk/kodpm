@@ -188,10 +188,12 @@ kodpm init
 
 Затем:
 
-1. Пишутся `odpm.json` и `user_settings.json`.
+1. Пишутся `odpm.json`, `user_settings.json`, `odoo.conf` (или `{platform}.conf`) и `values.local.yaml`.
 2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `git@github.com:odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
 3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта.
 4. Поднимаются кластер k3d (если ещё нет), Helm и модули.
+
+`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется.
 
 Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
 

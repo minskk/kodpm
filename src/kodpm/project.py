@@ -89,6 +89,26 @@ class ProjectFiles:
     def odoo_git_link(self) -> str:
         return str(self.odpm.get("odoo_git_link") or "")
 
+    @property
+    def conf_name(self) -> str:
+        try:
+            from kodpm.catalog import get_platform
+
+            platform = get_platform(self.platform_name)
+            return str(platform.get("conf_name") or f"{self.platform_name}.conf")
+        except KeyError:
+            if self.platform_name == "odoo":
+                return "odoo.conf"
+            return f"{self.platform_name}.conf"
+
+    @property
+    def conf_path(self) -> Path:
+        return self.project_dir / self.conf_name
+
+    @property
+    def values_local_path(self) -> Path:
+        return self.project_dir / "values.local.yaml"
+
     def addon_repos(self) -> list[dict[str, Any]]:
         return parse_dependencies(self.odpm.get("dependencies"))
 

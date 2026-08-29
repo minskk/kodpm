@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from kodpm.catalog import get_platform, get_version
+from kodpm.layout import compose_conf, load_values_local
 from kodpm.paths import profiles_dir
 from kodpm.project import ProjectFiles
 
@@ -162,6 +163,10 @@ def build_values(
 
     merged = deep_merge(values, profile_values)
     namespace = merged.pop("namespace", None)
+    local = load_values_local(project)
+    if local:
+        namespace = local.pop("namespace", namespace)
+        merged = deep_merge(merged, local)
     if extra:
         merged = deep_merge(merged, extra)
     if namespace:
@@ -169,6 +174,7 @@ def build_values(
     merged.setdefault("kodpm", {})["profile"] = profile
     if db_name:
         merged.setdefault("kodpm", {})["dbName"] = db_name
+    merged.setdefault("config", {})["raw"] = compose_conf(project, merged)
     return merged
 
 

@@ -37,7 +37,7 @@ source ~/projects/kodpm/.venv/bin/activate
 kodpm init
 ```
 
-Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons, запишет `odpm.json` и `user_settings.json`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку.
+Мастер спросит версию, имя ядра (`odoo` / `fincomtech`), git addons, запишет `odpm.json`, `user_settings.json`, `odoo.conf` и `values.local.yaml`, **склонирует ядро и addons в `~/projects/kodpm_data`** и сделает симлинки в корне проекта, затем запустит установку.
 
 ```bash
 kodpm up

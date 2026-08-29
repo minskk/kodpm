@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from kodpm.initproj import build_odpm_json, build_user_settings, write_project_files
 from kodpm.project import ProjectFiles
 from kodpm.values import build_values, sanitize_release
 
@@ -45,3 +46,20 @@ def test_old_version_probe():
     assert values["probes"]["type"] == "tcp"
     assert values["postgres"]["image"] == "postgres:12"
     assert "http_port" in values["config"]["options"]
+
+
+def test_values_local_overlay(tmp_path: Path):
+    write_project_files(
+        tmp_path,
+        build_odpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
+        build_user_settings("base,web"),
+    )
+    (tmp_path / "values.local.yaml").write_text(
+        "ingress:\n  host: custom.example.test\n",
+        encoding="utf-8",
+    )
+    values = build_values(ProjectFiles(tmp_path), "local")
+    assert values["ingress"]["host"] == "custom.example.test"
+    raw = values["config"]["raw"]
+    assert raw.count("data_dir") == 1
+    assert "web" in raw
