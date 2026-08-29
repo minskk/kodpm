@@ -50,10 +50,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 {{- if .Values.addons.hostPath.enabled }}
 {{- $root := printf "/mnt/extra-addons/%s" (default "developing" .Values.addons.hostPath.name) }}
+{{- range .Values.addons.hostPath.extraMounts }}
+{{- $paths = append $paths (printf "/mnt/extra-addons/%s" .name) }}
+{{- end }}
 {{- range .Values.addons.hostPath.extraPaths }}
-{{- if hasPrefix "/" . }}
-{{- $paths = append $paths . }}
-{{- else }}
+{{- if not (hasPrefix "/" .) }}
 {{- $paths = append $paths (printf "%s/%s" $root .) }}
 {{- end }}
 {{- end }}

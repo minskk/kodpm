@@ -48,22 +48,23 @@ def host_home_path(path: Path) -> str | None:
     return f"/host-home/{rel.as_posix()}"
 
 
-def local_extra_addon_paths(project: ProjectFiles) -> list[str]:
-    """In-cluster paths for addons. Do not include the project root (it has an odoo/ core symlink)."""
-    paths: list[str] = []
+def local_extra_addon_mounts(project: ProjectFiles) -> list[dict[str, str]]:
+    """hostPath mounts for addon clones. Bind the repo dir, not $HOME (home is mode 700)."""
+    mounts: list[dict[str, str]] = []
     drop_in = project.project_dir / "addons"
     if drop_in.is_dir():
         mapped = host_home_path(drop_in)
         if mapped:
-            paths.append(mapped)
+            mounts.append({"name": "addons", "path": mapped})
     for repo in project.addon_repos():
         dest = default_data_dir() / cache_dirname(
             str(repo["name"]),
             str(repo.get("branch") or project.odoo_version),
         )
         mapped = host_home_path(dest)
-        paths.append(mapped or str(repo["name"]))
-    return paths
+        if mapped:
+            mounts.append({"name": str(repo["name"]), "path": mapped})
+    return mounts
 
 
 def build_values(
@@ -104,12 +105,14 @@ def build_values(
         version.longpolling_option: 8072,
         "workers": 0,
         "proxy_mode": True,
-        "list_db": True,
+        "list_db": not bool(db_name),
         "max_cron_threads": 1,
         "without_demo": not project.create_demo(),
         "db_maxconn": 64,
         "logfile": False,
     }
+    if db_name:
+        options["dbfilter"] = f"^{db_name}$"
 
     conf_name = str(platform.get("conf_name") or f"{platform.get('platform_name', 'odoo')}.conf")
     conf_mount = str(platform.get("conf_mount") or "/etc/odoo")
@@ -155,11 +158,18 @@ def build_values(
         },
         "addons": {
             "repos": project.addon_repos(),
-            "hostPath": {"enabled": False, "name": "developing", "path": "", "extraPaths": []},
+            "hostPath": {
+                "enabled": False,
+                "name": "developing",
+                "path": "",
+                "extraPaths": [],
+                "extraMounts": [],
+            },
         },
         "kodpm": {
             "profile": profile,
             "dbName": db_name or "odoo",
+            "runtimeDb": db_name or "",
             "adminLogin": project.admin_login(),
             "dbLang": project.db_lang(),
             "python": version.python,
@@ -175,7 +185,8 @@ def build_values(
                 "enabled": True,
                 "name": "developing",
                 "path": host_path,
-                "extraPaths": local_extra_addon_paths(project),
+                "extraPaths": [],
+                "extraMounts": local_extra_addon_mounts(project),
             }
         if project.dev_mode():
             values["devMode"] = project.dev_mode()
@@ -200,6 +211,7 @@ def build_values(
     merged.setdefault("kodpm", {})["profile"] = profile
     if db_name:
         merged.setdefault("kodpm", {})["dbName"] = db_name
+        merged.setdefault("kodpm", {})["runtimeDb"] = db_name
     merged.setdefault("config", {})["raw"] = compose_conf(project, merged)
     return merged
 

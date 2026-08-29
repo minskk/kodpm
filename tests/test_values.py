@@ -67,7 +67,7 @@ def test_values_local_overlay(tmp_path: Path):
     assert "web" in raw
 
 
-def test_addons_path_uses_host_home_for_clones():
+def test_addons_path_uses_extra_mounts():
     values = {
         "extraAddons": "/mnt/extra-addons",
         "addons": {
@@ -76,16 +76,21 @@ def test_addons_path_uses_host_home_for_clones():
                 "enabled": True,
                 "name": "developing",
                 "path": "/host-home/projects/kodpm_autoparts",
-                "extraPaths": ["/host-home/projects/kodpm_data/digital-autoparts-17.0"],
+                "extraMounts": [
+                    {
+                        "name": "digital-autoparts",
+                        "path": "/host-home/projects/kodpm_data/digital-autoparts-17.0",
+                    }
+                ],
             },
         },
     }
     path = addons_path_of(values)
-    assert path == "/host-home/projects/kodpm_data/digital-autoparts-17.0"
-    assert "kodpm_autoparts," not in path and not path.endswith("kodpm_autoparts")
+    assert path == "/mnt/extra-addons/digital-autoparts"
+    assert "kodpm_autoparts" not in path
 
 
-def test_local_extra_paths_resolve_under_home(tmp_path: Path, monkeypatch):
+def test_local_extra_mounts_under_home(tmp_path: Path, monkeypatch):
     home = tmp_path / "user"
     project_dir = home / "projects" / "app"
     data = home / "projects" / "kodpm_data"
@@ -99,9 +104,24 @@ def test_local_extra_paths_resolve_under_home(tmp_path: Path, monkeypatch):
         build_user_settings("base"),
     )
     values = build_values(ProjectFiles(project_dir), "local")
-    extras = values["addons"]["hostPath"]["extraPaths"]
-    assert extras == ["/host-home/projects/kodpm_data/web-17.0"]
+    mounts = values["addons"]["hostPath"]["extraMounts"]
+    assert mounts == [
+        {"name": "web", "path": "/host-home/projects/kodpm_data/web-17.0"},
+    ]
     raw = values["config"]["raw"]
-    assert "/host-home/projects/kodpm_data/web-17.0" in raw
-    assert "/host-home/projects/app," not in raw
-    assert "developing/web" not in raw
+    assert "addons_path = /mnt/extra-addons/web" in raw
+    assert "db_name = False" in raw
+
+
+def test_runtime_db_pins_conf(tmp_path: Path):
+    write_project_files(
+        tmp_path,
+        build_odpm_json("17.0", "odoo", []),
+        build_user_settings("base"),
+    )
+    values = build_values(ProjectFiles(tmp_path), "test", db_name="shop")
+    raw = values["config"]["raw"]
+    assert "db_name = shop" in raw
+    assert "list_db = False" in raw
+    assert "dbfilter = ^shop$" in raw
+    assert values["kodpm"]["runtimeDb"] == "shop"

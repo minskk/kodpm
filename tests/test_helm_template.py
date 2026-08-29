@@ -48,7 +48,7 @@ def test_helm_template_demo(tmp_path: Path):
         if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "demo-17-odoo"
     )
     vol_names = {vol["name"] for vol in odoo["spec"]["template"]["spec"]["volumes"]}
-    assert "host-home" in vol_names
+    assert "host-home" not in vol_names
     assert not any(
         (doc.get("metadata") or {}).get("annotations", {}).get("helm.sh/hook")
         for doc in docs

@@ -129,7 +129,13 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     default="local",
     show_default=True,
 )
-@click.option("-d", "--db", "db_name", default=None, help="Odoo database name")
+@click.option(
+    "-d",
+    "--db",
+    "db_name",
+    default=None,
+    help="Pin this Odoo database (db_name/dbfilter). Without -d the database manager is used.",
+)
 @click.pass_context
 def cli(ctx: click.Context, project_dir: Path, profile: str, db_name: str | None) -> None:
     """Kubernetes environment for Odoo and rebranded forks."""

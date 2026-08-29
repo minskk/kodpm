@@ -181,11 +181,11 @@ spec:
             {% if host_path %}
             - name: developing
               mountPath: /mnt/extra-addons/{{ host_path_name }}
-            {% if host_home %}
-            - name: host-home
-              mountPath: /host-home
+            {% for mount in extra_mounts %}
+            - name: addon-{{ mount.name }}
+              mountPath: /mnt/extra-addons/{{ mount.name }}
               readOnly: true
-            {% endif %}
+            {% endfor %}
             {% endif %}
       {% endif %}
       volumes:
@@ -213,10 +213,10 @@ spec:
           hostPath:
             path: {{ host_path | quote }}
             type: DirectoryOrCreate
-        {% if host_home %}
-        - name: host-home
+        {% for mount in extra_mounts %}
+        - name: addon-{{ mount.name }}
           hostPath:
-            path: /host-home
+            path: {{ mount.path | quote }}
             type: Directory
-        {% endif %}
+        {% endfor %}
         {% endif %}

@@ -44,11 +44,17 @@ def addons_path_of(values: dict[str, Any]) -> str:
     host = addons.get("hostPath") or {}
     if host.get("enabled"):
         root = f"/mnt/extra-addons/{host.get('name') or 'developing'}"
+        for mount in host.get("extraMounts") or []:
+            name = (mount or {}).get("name")
+            if name:
+                paths.append(f"/mnt/extra-addons/{name}")
         for extra in host.get("extraPaths") or []:
             if not extra:
                 continue
             text = str(extra)
-            paths.append(text if text.startswith("/") else f"{root}/{text}")
+            if text.startswith("/"):
+                continue
+            paths.append(f"{root}/{text}")
     if not paths:
         return str(values.get("extraAddons") or "/mnt/extra-addons")
     return ",".join(paths)
@@ -57,15 +63,24 @@ def addons_path_of(values: dict[str, Any]) -> str:
 def cluster_conf_options(values: dict[str, Any]) -> dict[str, str]:
     postgres = values.get("postgres") or {}
     secrets = values.get("secrets") or {}
-    return {
+    result = {
         "addons_path": addons_path_of(values),
         "data_dir": str(values.get("dataDir") or "/var/lib/odoo"),
         "db_host": postgres_host(values),
         "db_port": str(postgres.get("port") or 5432),
         "db_user": str(postgres.get("user") or "odoo"),
-        "db_name": "False",
         "admin_passwd": str(secrets.get("adminPassword") or "admin"),
     }
+    runtime = str((values.get("kodpm") or {}).get("runtimeDb") or "").strip()
+    if runtime:
+        result["db_name"] = runtime
+        result["list_db"] = "False"
+        result["dbfilter"] = f"^{runtime}$"
+    else:
+        result["db_name"] = "False"
+        result["list_db"] = "True"
+        result["dbfilter"] = ""
+    return result
 
 
 def render_conf_from_values(values: dict[str, Any]) -> str:

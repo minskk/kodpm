@@ -83,6 +83,7 @@ addons:
     name: developing
     path: ""
     extraPaths: []
+    extraMounts: []
   sshSecretName: ""
 
 modules:

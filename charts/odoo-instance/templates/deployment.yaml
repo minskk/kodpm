@@ -123,9 +123,9 @@ spec:
             {{- if .Values.addons.hostPath.enabled }}
             - name: developing
               mountPath: /mnt/extra-addons/{{ default "developing" .Values.addons.hostPath.name }}
-            {{- if hasPrefix "/host-home/" (.Values.addons.hostPath.path | default "") }}
-            - name: host-home
-              mountPath: /host-home
+            {{- range .Values.addons.hostPath.extraMounts }}
+            - name: addon-{{ .name }}
+              mountPath: /mnt/extra-addons/{{ .name }}
               readOnly: true
             {{- end }}
             {{- end }}
@@ -193,10 +193,10 @@ spec:
           hostPath:
             path: {{ .Values.addons.hostPath.path | quote }}
             type: DirectoryOrCreate
-        {{- if hasPrefix "/host-home/" (.Values.addons.hostPath.path | default "") }}
-        - name: host-home
+        {{- range .Values.addons.hostPath.extraMounts }}
+        - name: addon-{{ .name }}
           hostPath:
-            path: /host-home
+            path: {{ .path | quote }}
             type: Directory
         {{- end }}
         {{- end }}

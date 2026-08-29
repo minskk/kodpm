@@ -37,6 +37,22 @@ def ensure_symlink(link: Path, target: Path) -> None:
     link.symlink_to(dest, target_is_directory=True)
 
 
+def ensure_readable_tree(path: Path) -> None:
+    """Make a clone readable for the Odoo container (uid 101)."""
+    if not path.exists():
+        return
+    for root, dirs, files in os.walk(path):
+        try:
+            os.chmod(root, 0o755)
+        except OSError:
+            pass
+        for name in files:
+            try:
+                os.chmod(os.path.join(root, name), 0o644)
+            except OSError:
+                pass
+
+
 def clone_or_update(url: str, dest: Path, branch: str) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if (dest / ".git").is_dir():
@@ -94,6 +110,7 @@ def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
         dest = data / cache_dirname(name, branch)
         log(f"Addons: {url} ({branch}) → {dest}")
         clone_or_update(url, dest, branch)
+        ensure_readable_tree(dest)
         ensure_symlink(project.project_dir / name, dest)
         linked.append(name)
         log(f"Ссылка: {project.project_dir / name} → {dest}")
