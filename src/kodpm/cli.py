@@ -98,7 +98,16 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
         click.echo(helm_template(release, namespace, values_file))
         return
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
-    helm_upgrade(release, namespace, values_file, wait=wait)
+    try:
+        helm_upgrade(release, namespace, values_file, wait=wait)
+    except ToolError:
+        click.echo(
+            "Helm не дождался Ready. Поды этого релиза:\n"
+            f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release}\n"
+            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo --tail=80",
+            err=True,
+        )
+        raise
     host = (values.get("ingress") or {}).get("host")
     click.echo(f"Release {release} is installed.")
     if host:

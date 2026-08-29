@@ -63,6 +63,7 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
         "restore_from": kwargs.get("restore_from", ""),
         "host_path": host_path_cfg.get("path") if host_path_cfg.get("enabled") else "",
         "host_path_name": host_path_cfg.get("name") or "developing",
+        "host_home": str(host_path_cfg.get("path") or "").startswith("/host-home/"),
     }
     env = Environment(
         loader=FileSystemLoader(str(templates_dir())),

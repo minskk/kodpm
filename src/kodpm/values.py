@@ -10,6 +10,7 @@ from kodpm.catalog import get_platform, get_version
 from kodpm.layout import compose_conf, load_values_local
 from kodpm.paths import profiles_dir
 from kodpm.project import ProjectFiles
+from kodpm.sources import cache_dirname, default_data_dir
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -38,13 +39,31 @@ def _image_parts(image: str) -> tuple[str, str]:
     return image, "latest"
 
 
-def _host_home_path(project_dir: Path) -> str | None:
+def host_home_path(path: Path) -> str | None:
     home = Path.home().resolve()
     try:
-        rel = project_dir.resolve().relative_to(home)
+        rel = path.resolve().relative_to(home)
     except ValueError:
         return None
     return f"/host-home/{rel.as_posix()}"
+
+
+def local_extra_addon_paths(project: ProjectFiles) -> list[str]:
+    """In-cluster paths for addons. Do not include the project root (it has an odoo/ core symlink)."""
+    paths: list[str] = []
+    drop_in = project.project_dir / "addons"
+    if drop_in.is_dir():
+        mapped = host_home_path(drop_in)
+        if mapped:
+            paths.append(mapped)
+    for repo in project.addon_repos():
+        dest = default_data_dir() / cache_dirname(
+            str(repo["name"]),
+            str(repo.get("branch") or project.odoo_version),
+        )
+        mapped = host_home_path(dest)
+        paths.append(mapped or str(repo["name"]))
+    return paths
 
 
 def build_values(
@@ -149,14 +168,14 @@ def build_values(
     }
 
     if profile == "local":
-        host_path = _host_home_path(project.project_dir)
+        host_path = host_home_path(project.project_dir)
         if host_path:
             values["addons"]["repos"] = []
             values["addons"]["hostPath"] = {
                 "enabled": True,
                 "name": "developing",
                 "path": host_path,
-                "extraPaths": [str(repo["name"]) for repo in project.addon_repos()],
+                "extraPaths": local_extra_addon_paths(project),
             }
         if project.dev_mode():
             values["devMode"] = project.dev_mode()
@@ -169,6 +188,13 @@ def build_values(
         merged = deep_merge(merged, local)
     if extra:
         merged = deep_merge(merged, extra)
+    if profile == "local":
+        user_host = ((local or {}).get("ingress") or {}).get("host")
+        extra_host = ((extra or {}).get("ingress") or {}).get("host") if extra else None
+        if not user_host and not extra_host:
+            merged.setdefault("ingress", {})["host"] = (
+                f"{sanitize_release(project.name)}.127.0.0.1.nip.io"
+            )
     if namespace:
         merged.setdefault("kodpm", {})["namespace"] = namespace
     merged.setdefault("kodpm", {})["profile"] = profile

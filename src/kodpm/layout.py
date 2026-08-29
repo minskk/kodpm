@@ -44,10 +44,11 @@ def addons_path_of(values: dict[str, Any]) -> str:
     host = addons.get("hostPath") or {}
     if host.get("enabled"):
         root = f"/mnt/extra-addons/{host.get('name') or 'developing'}"
-        paths.append(root)
         for extra in host.get("extraPaths") or []:
-            if extra:
-                paths.append(f"{root}/{extra}")
+            if not extra:
+                continue
+            text = str(extra)
+            paths.append(text if text.startswith("/") else f"{root}/{text}")
     if not paths:
         return str(values.get("extraAddons") or "/mnt/extra-addons")
     return ",".join(paths)

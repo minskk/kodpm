@@ -42,6 +42,13 @@ def test_helm_template_demo(tmp_path: Path):
     assert "demo-17-postgres" in names
     assert "demo-17-minio" in names
     assert "demo-17-minio-bucket" not in names
+    odoo = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "demo-17-odoo"
+    )
+    vol_names = {vol["name"] for vol in odoo["spec"]["template"]["spec"]["volumes"]}
+    assert "host-home" in vol_names
     assert not any(
         (doc.get("metadata") or {}).get("annotations", {}).get("helm.sh/hook")
         for doc in docs

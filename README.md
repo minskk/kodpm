@@ -44,7 +44,7 @@ kodpm -d odoo modules update
 kodpm -d odoo db backup --name demo
 ```
 
-UI: http://odoo.127.0.0.1.nip.io — DB manager password comes from `user_settings.json`.
+UI: `http://<project-dir-name>.127.0.0.1.nip.io` (for example `http://kodpm-odoo-test.127.0.0.1.nip.io`) — DB manager password comes from `user_settings.json`.
 
 `--project-dir` is only for calling kodpm while standing in another directory. Existing demo:
 

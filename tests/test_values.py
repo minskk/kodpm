@@ -2,6 +2,7 @@ from pathlib import Path
 
 from kodpm.initproj import build_odpm_json, build_user_settings, write_project_files
 from kodpm.project import ProjectFiles
+from kodpm.layout import addons_path_of
 from kodpm.values import build_values, sanitize_release
 
 
@@ -26,6 +27,7 @@ def test_demo_17_local_values():
     assert values["addons"]["repos"] == []
     assert values["addons"]["hostPath"]["extraPaths"] == []
     assert "data_dir" not in values["config"]["options"]
+    assert values["ingress"]["host"] == "demo-17.127.0.0.1.nip.io"
 
 
 def test_fincomtech_values():
@@ -63,3 +65,43 @@ def test_values_local_overlay(tmp_path: Path):
     raw = values["config"]["raw"]
     assert raw.count("data_dir") == 1
     assert "web" in raw
+
+
+def test_addons_path_uses_host_home_for_clones():
+    values = {
+        "extraAddons": "/mnt/extra-addons",
+        "addons": {
+            "repos": [],
+            "hostPath": {
+                "enabled": True,
+                "name": "developing",
+                "path": "/host-home/projects/kodpm_autoparts",
+                "extraPaths": ["/host-home/projects/kodpm_data/digital-autoparts-17.0"],
+            },
+        },
+    }
+    path = addons_path_of(values)
+    assert path == "/host-home/projects/kodpm_data/digital-autoparts-17.0"
+    assert "kodpm_autoparts," not in path and not path.endswith("kodpm_autoparts")
+
+
+def test_local_extra_paths_resolve_under_home(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "app"
+    data = home / "projects" / "kodpm_data"
+    project_dir.mkdir(parents=True)
+    (data / "web-17.0").mkdir(parents=True)
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
+    write_project_files(
+        project_dir,
+        build_odpm_json("17.0", "odoo", ["https://github.com/OCA/web.git 17.0"]),
+        build_user_settings("base"),
+    )
+    values = build_values(ProjectFiles(project_dir), "local")
+    extras = values["addons"]["hostPath"]["extraPaths"]
+    assert extras == ["/host-home/projects/kodpm_data/web-17.0"]
+    raw = values["config"]["raw"]
+    assert "/host-home/projects/kodpm_data/web-17.0" in raw
+    assert "/host-home/projects/app," not in raw
+    assert "developing/web" not in raw

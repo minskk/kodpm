@@ -181,6 +181,11 @@ spec:
             {% if host_path %}
             - name: developing
               mountPath: /mnt/extra-addons/{{ host_path_name }}
+            {% if host_home %}
+            - name: host-home
+              mountPath: /host-home
+              readOnly: true
+            {% endif %}
             {% endif %}
       {% endif %}
       volumes:
@@ -208,4 +213,10 @@ spec:
           hostPath:
             path: {{ host_path | quote }}
             type: DirectoryOrCreate
+        {% if host_home %}
+        - name: host-home
+          hostPath:
+            path: /host-home
+            type: Directory
+        {% endif %}
         {% endif %}

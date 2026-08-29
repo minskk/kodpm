@@ -46,7 +46,7 @@ kodpm -d odoo modules update
 kodpm -d odoo db backup --name demo
 ```
 
-UI: http://odoo.127.0.0.1.nip.io — пароль менеджера БД из `user_settings.json`.
+UI: `http://<имя-каталога-проекта>.127.0.0.1.nip.io` (например `http://kodpm-odoo-test.127.0.0.1.nip.io`) — пароль менеджера БД из `user_settings.json`.
 
 `--project-dir` нужен, только если запускаете kodpm из другого каталога. Готовое демо:
 

@@ -123,6 +123,11 @@ spec:
             {{- if .Values.addons.hostPath.enabled }}
             - name: developing
               mountPath: /mnt/extra-addons/{{ default "developing" .Values.addons.hostPath.name }}
+            {{- if hasPrefix "/host-home/" (.Values.addons.hostPath.path | default "") }}
+            - name: host-home
+              mountPath: /host-home
+              readOnly: true
+            {{- end }}
             {{- end }}
           {{- if eq .Values.probes.type "http" }}
           readinessProbe:
@@ -188,6 +193,12 @@ spec:
           hostPath:
             path: {{ .Values.addons.hostPath.path | quote }}
             type: DirectoryOrCreate
+        {{- if hasPrefix "/host-home/" (.Values.addons.hostPath.path | default "") }}
+        - name: host-home
+          hostPath:
+            path: /host-home
+            type: Directory
+        {{- end }}
         {{- end }}
         {{- if .Values.addons.repos }}
         - name: repos-list

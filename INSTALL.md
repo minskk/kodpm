@@ -203,6 +203,6 @@ kodpm init
 kodpm init --no-up --no-clone
 ```
 
-UI: <http://odoo.127.0.0.1.nip.io>
+UI (имя из каталога проекта): <http://kodpm-odoo-test.127.0.0.1.nip.io>
 
 Дальше: [README_RU.md](README_RU.md), [docs/odpm-mapping.md](docs/odpm-mapping.md).
