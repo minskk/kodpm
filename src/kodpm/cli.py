@@ -638,6 +638,9 @@ def up(
         _run_modules(ctx, "install", None)
     if do_update or ctx.obj.get("do_update"):
         _run_modules(ctx, "update", None)
+    if not (do_install or ctx.obj.get("do_install") or do_update or ctx.obj.get("do_update")):
+        db = ctx.obj.get("db_name") or "odoo"
+        click.echo(f"Дальше: kodpm -d {db} modules install")
 
 
 @cli.command()

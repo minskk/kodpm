@@ -359,6 +359,7 @@ def test_up_command_runs_stack(tmp_path: Path, monkeypatch):
     result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo", "up"])
     assert result.exit_code == 0, result.output
     assert called == ["up"]
+    assert "kodpm -d odoo modules install" in result.output
     result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo", "up", "-i"])
     assert result.exit_code == 0, result.output
     assert called[-2:] == ["up", "install"]
