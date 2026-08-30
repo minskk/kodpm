@@ -13,7 +13,14 @@ from kodpm.cmutil import apply_configmap_data, get_configmap_data
 from kodpm.helm import helm_status, helm_template, helm_uninstall, helm_upgrade
 from kodpm.iniutil import get_ini_option, set_ini_option
 from kodpm.jobs import render_job, run_job, timestamp_suffix
-from kodpm.kube import delete_release_jobs, exec_in, kubectl, rollout_odoo, scale_odoo
+from kodpm.kube import (
+    delete_release_jobs,
+    exec_in,
+    kubectl,
+    rollout_odoo,
+    run_while_showing_progress,
+    scale_odoo,
+)
 from kodpm.proc import ToolError
 from kodpm.catalog import resolve_odoo_version
 from kodpm.layout import ensure_values_local, sync_project_layout
@@ -151,12 +158,47 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
         return
     if not dry_run:
         delete_release_jobs(namespace, release)
+    extras = list(values.get("extraServices") or [])
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
+    if wait:
+        click.echo("Прогресс (этот лог обновляется каждые ~15 с; или другой терминал):")
+        click.echo(f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release} -w")
+        click.echo(
+            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},"
+            f"app.kubernetes.io/component=odoo -c pip-req -f"
+        )
+        click.echo(
+            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},"
+            f"app.kubernetes.io/component=odoo -c odoo -f"
+        )
+
+    def _helm() -> None:
+        if wait and extras:
+            core_values = dict(values)
+            core_values["extraServices"] = []
+            core_file = dump_values(
+                core_values,
+                values_file.with_name(values_file.stem + "-core.yaml"),
+            )
+            click.echo("Helm --wait только для Odoo/Postgres/MinIO; extra-сервисы без ожидания.")
+            helm_upgrade(release, namespace, core_file, wait=True)
+            helm_upgrade(release, namespace, values_file, wait=False)
+        else:
+            helm_upgrade(release, namespace, values_file, wait=wait)
+
     try:
-        helm_upgrade(release, namespace, values_file, wait=wait)
+        if wait:
+            run_while_showing_progress(
+                _helm,
+                namespace=namespace,
+                release=release,
+                log=click.echo,
+            )
+        else:
+            _helm()
     except ToolError:
         click.echo(
-            "Helm не дождался Ready. Поды этого релиза:\n"
+            "Helm не дождался Ready ядра (Odoo/Postgres). Поды этого релиза:\n"
             f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release}\n"
             f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo -c pip-req --tail=80\n"
             f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},app.kubernetes.io/component=odoo -c odoo --tail=80",
@@ -167,7 +209,6 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     click.echo(f"Release {release} is installed.")
     if host:
         click.echo(f"URL: http://{host}")
-    extras = values.get("extraServices") or []
     if extras:
         click.echo("Extra services (cluster DNS; port-forward to open on the host):")
         for item in extras:

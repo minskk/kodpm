@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from kodpm.kube import apply_yaml, delete_job, kubectl, wait_job
+from kodpm.kube import apply_yaml, delete_job, follow_job_logs, kubectl, wait_job
 from kodpm.paths import templates_dir
 from kodpm.proc import ToolError
 
@@ -81,6 +82,12 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
 def run_job(manifest: str, job_name: str, namespace: str, timeout: str = "15m") -> None:
     delete_job(job_name, namespace)
     apply_yaml(manifest, namespace)
+    follower = threading.Thread(
+        target=follow_job_logs,
+        args=(job_name, namespace),
+        daemon=True,
+    )
+    follower.start()
     try:
         wait_job(job_name, namespace, timeout=timeout)
     except KeyboardInterrupt:
