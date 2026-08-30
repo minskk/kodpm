@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,19 @@ _PROFILE_OPTION = click.option(
     default=None,
     help="local, test or dev (same as global kodpm --profile … <command>)",
 )
+
+
+def _ask_init_modules(modules: str | None, *, default: str = "base,web") -> str:
+    """Ask for user_settings init_modules on first install; default is base,web."""
+    if modules is not None:
+        text = str(modules).strip()
+        return ",".join(parse_modules(text)) or default
+    chosen = default
+    if sys.stdin.isatty():
+        chosen = str(
+            click.prompt("Модули для инициализации (init_modules)", default=default)
+        ).strip() or default
+    return ",".join(parse_modules(chosen)) or default
 
 
 def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) -> None:
@@ -438,8 +452,6 @@ def run_init(
                     default="",
                     show_default=False,
                 )
-        if modules is None:
-            modules = click.prompt("Модули для установки (-i)", default="base,web")
         if db_lang is None:
             db_lang = click.prompt("Язык базы", default="ru_RU")
         if admin_password is None:
@@ -457,14 +469,22 @@ def run_init(
         odpm = cloned_odpm or {}
         odoo_version = str(odpm.get("odoo_version") or "17.0")
         platform = normalize_platform(str(odpm.get("platform_name") or "odoo"))
-        if modules is None:
-            modules = "base,web"
         if db_lang is None:
             database = odpm.get("database") if isinstance(odpm.get("database"), dict) else {}
             db_lang = str((database or {}).get("language") or "ru_RU")
         if admin_password is None:
             admin_password = "admin"
 
+    settings_path = project_dir / "user_settings.json"
+    default_modules = "base,web"
+    if settings_path.is_file():
+        previous = load_json(settings_path) or {}
+        if previous.get("init_modules"):
+            default_modules = str(previous["init_modules"])
+    if not settings_path.exists() or overwrite:
+        modules = _ask_init_modules(modules, default=default_modules)
+    else:
+        modules = modules or default_modules
     settings = build_user_settings(
         modules or "base,web",
         db_lang=db_lang or "ru_RU",
@@ -473,7 +493,6 @@ def run_init(
         dev_mode="reload,xml" if ctx.obj["profile"] == "local" else "",
         addons_branch=addons_branch,
     )
-    settings_path = project_dir / "user_settings.json"
     existing = [path for path in (project_dir / ODPM_JSON_NAME, project_dir / PROJECT_JSON_NAME, settings_path) if path.exists()]
     if existing and not overwrite and not skip_wizard:
         if not click.confirm("Файлы проекта уже есть. Перезаписать?", default=False):

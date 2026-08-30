@@ -294,8 +294,49 @@ def test_init_from_repo_symlinks_existing_odpm(tmp_path: Path, monkeypatch):
     assert link.resolve() == (dest / "odpm.json").resolve()
     assert json.loads(link.read_text(encoding="utf-8"))["developing"]["git"].endswith("extra_module.git")
     assert "Версия ядра" not in result.output
-    assert (project_dir / "user_settings.json").is_file()
+    settings = json.loads((project_dir / "user_settings.json").read_text(encoding="utf-8"))
+    assert settings["init_modules"] == "base,web"
     assert (project_dir / "extra_module").is_symlink()
+
+
+def test_init_from_repo_prompts_init_modules(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "fincom_extra"
+    data = home / "projects" / "kodpm_data"
+    project_dir.mkdir(parents=True)
+    dest = data / "extra_module-17.0-dev"
+    dest.mkdir(parents=True)
+    manifest = {
+        "manifest_schema": 2,
+        "odoo_version": "17.0",
+        "platform": {"git": "https://github.com/odoo/odoo.git"},
+        "developing": {"git": "git@gitverse.ru:fincomtech/extra_module.git"},
+    }
+    (dest / "odpm.json").write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
+    monkeypatch.setattr("kodpm.cli.clone_or_update", lambda url, dest_path, branch: dest_path.mkdir(parents=True, exist_ok=True))
+    monkeypatch.setattr("kodpm.sources.clone_or_update", lambda url, dest_path, branch: None)
+    monkeypatch.setattr(
+        "kodpm.cli._ask_init_modules",
+        lambda modules, default="base,web": "sale,stock",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--project-dir",
+            str(project_dir),
+            "--init",
+            "git@gitverse.ru:fincomtech/extra_module.git",
+            "--branch",
+            "17.0-dev",
+            "--skip-start",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    settings = json.loads((project_dir / "user_settings.json").read_text(encoding="utf-8"))
+    assert settings["init_modules"] == "sale,stock"
 
 
 def test_d_flag_without_up_prints_help(tmp_path: Path, monkeypatch):

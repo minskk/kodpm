@@ -24,6 +24,7 @@ mkdir -p ~/projects/myapp && cd ~/projects/myapp
 source ~/projects/kodpm/.venv/bin/activate
 
 # файлы + клон developing (визард не нужен, если в репо уже есть odpm.json)
+# спросит init_modules (по умолчанию base,web) → user_settings.json
 kodpm --init git@github.com:org/repo.git --branch 17.0-dev --skip-start
 
 # если в odpm.json есть scenarios.developer.secrets
@@ -220,13 +221,13 @@ kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev --ski
 kodpm -d odoo up
 ```
 
-`--init URL` клонирует разрабатываемый репозиторий. Если в клоне есть `odpm.json`, визард не запускается: в корне появляется симлинк `odpm.json` → `<имя>/odpm.json`. Без URL (`kodpm --init` или `kodpm init`) мастер спросит:
+`--init URL` клонирует разрабатываемый репозиторий. Если в клоне есть `odpm.json`, визард не запускается: в корне появляется симлинк `odpm.json` → `<имя>/odpm.json`. В обоих случаях спрашиваются модули для инициализации (`init_modules` в `user_settings.json`, по умолчанию `base,web`). Без URL (`kodpm --init` или `kodpm init`) мастер ещё спросит:
 
 - git-репозитории (первый — developing, остальные — `dependencies` строками);
 - ветку (`--branch` или один общий вопрос);
 - версию ядра (10.0–19.0), если манифеста нет;
 - наименование ядра (`odoo`, `fincomtech`, …);
-- модули для `-i`, язык БД, пароль.
+- язык БД, пароль.
 
 Затем:
 
