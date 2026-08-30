@@ -229,7 +229,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if host:
         click.echo(f"URL: http://{host}")
     if extras:
-        click.echo("Extra services on 127.0.0.1:")
+        click.echo("Extra services on 127.0.0.1 (port-forward к Service):")
         start_extra_port_forwards(
             _project(ctx),
             namespace,
@@ -859,6 +859,9 @@ def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
     finally:
         scale_odoo(fullname, namespace, int(values.get("replicaCount") or 1))
     click.echo(f"Module {action} finished.")
+    host = (values.get("ingress") or {}).get("host")
+    if host:
+        click.echo(f"URL: http://{host}")
 
 
 @modules.command("install")

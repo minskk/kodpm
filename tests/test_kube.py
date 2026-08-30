@@ -2,6 +2,7 @@ from io import StringIO
 from types import SimpleNamespace
 
 from kodpm.kube import (
+    _filter_pod_table,
     _replace_progress_block,
     delete_release_jobs,
     run_while_showing_progress,
@@ -38,6 +39,27 @@ def test_scale_odoo_waits_when_scaled_to_zero(monkeypatch):
     assert calls[1][:2] == ("rollout", "status")
 
 
+def test_run_while_showing_progress_skips_first_snapshot(monkeypatch):
+    gets: list[int] = []
+
+    def fake_kubectl(*args: str, **kwargs):
+        if args[:2] == ("get", "pods"):
+            gets.append(1)
+        return SimpleNamespace(stdout="NAME READY\napp-odoo-1 1/1\n", stderr="")
+
+    monkeypatch.setattr("kodpm.kube.kubectl", fake_kubectl)
+    run_while_showing_progress(
+        lambda: None,
+        namespace="kodpm",
+        release="app",
+        log=lambda _msg: None,
+        interval=0.01,
+        tty=False,
+        include_logs=False,
+    )
+    assert gets == [1]
+
+
 def test_run_while_showing_progress_prints_pods(monkeypatch):
     lines: list[str] = []
 
@@ -57,6 +79,46 @@ def test_run_while_showing_progress_prints_pods(monkeypatch):
     )
     assert any("kodpm-autoparts-odoo" in line for line in lines)
     assert any("pip install" in line for line in lines)
+
+
+def test_run_while_showing_progress_can_skip_logs(monkeypatch):
+    lines: list[str] = []
+    log_calls: list[tuple[str, ...]] = []
+
+    def fake_kubectl(*args: str, **kwargs):
+        if args[:2] == ("logs",):
+            log_calls.append(args)
+        if args[:2] == ("get", "pods"):
+            return SimpleNamespace(stdout="NAME READY STATUS\napp-mailpit-1 0/1 Pending\n", stderr="")
+        return SimpleNamespace(stdout="", stderr="")
+
+    monkeypatch.setattr("kodpm.kube.kubectl", fake_kubectl)
+    run_while_showing_progress(
+        lambda: None,
+        namespace="kodpm",
+        release="app",
+        log=lines.append,
+        interval=0.01,
+        tty=False,
+        include_logs=False,
+    )
+    assert any("app-mailpit" in line for line in lines)
+    assert not log_calls
+
+
+def test_filter_pod_table_hides_core():
+    table = (
+        "NAME READY STATUS\n"
+        "app-odoo-1 1/1 Running\n"
+        "app-postgres-0 1/1 Running\n"
+        "app-minio-1 1/1 Running\n"
+        "app-mailpit-1 0/1 ContainerCreating\n"
+    )
+    filtered = _filter_pod_table(table, ("app-odoo", "app-postgres", "app-minio"))
+    assert "mailpit" in filtered
+    assert "odoo" not in filtered
+    assert "postgres" not in filtered
+    assert "minio" not in filtered
 
 
 def test_replace_progress_block_overwrites():

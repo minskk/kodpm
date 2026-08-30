@@ -85,7 +85,7 @@ def current_context() -> str:
     return (result.stdout or "").strip()
 
 
-def pods_status(namespace: str, release: str) -> str:
+def pods_status(namespace: str, release: str, *, hide_prefixes: tuple[str, ...] = ()) -> str:
     result = kubectl(
         "get",
         "pods",
@@ -96,7 +96,21 @@ def pods_status(namespace: str, release: str) -> str:
         capture=True,
         check=False,
     )
-    return (result.stdout or "").strip()
+    return _filter_pod_table((result.stdout or "").strip(), hide_prefixes)
+
+
+def _filter_pod_table(table: str, hide_prefixes: tuple[str, ...]) -> str:
+    if not table or not hide_prefixes:
+        return table
+    lines = table.splitlines()
+    header, rows = lines[0], lines[1:]
+    kept: list[str] = []
+    for row in rows:
+        name = row.split()[0] if row.split() else ""
+        if any(name.startswith(prefix) for prefix in hide_prefixes):
+            continue
+        kept.append(row)
+    return "\n".join([header, *kept]) if kept else header
 
 
 def odoo_container_tail(namespace: str, release: str, container: str, *, tail: int = 8) -> str:
@@ -159,10 +173,13 @@ def run_while_showing_progress(
     log: Callable[[str], None] = print,
     interval: float = 15,
     tty: bool | None = None,
+    include_logs: bool = True,
+    hide_prefixes: tuple[str, ...] = (),
 ) -> Any:
     """Run `work` and print pod / init-container progress until it finishes.
 
-    On a TTY the progress block is redrawn in place; otherwise new snapshots append.
+    First snapshot is skipped (core Odoo/Postgres/MinIO are expected). After that
+    the block is redrawn on a TTY; otherwise new snapshots append.
     """
     done = threading.Event()
     box: dict[str, Any] = {}
@@ -184,14 +201,15 @@ def run_while_showing_progress(
 
     def snapshot() -> None:
         nonlocal last_text, printed_lines
-        table = pods_status(namespace, release)
+        table = pods_status(namespace, release, hide_prefixes=hide_prefixes)
         container = ""
         snippet = ""
-        for name in ("wait-postgres", "pip-req", "odoo"):
-            snippet = odoo_container_tail(namespace, release, name)
-            if snippet:
-                container = name
-                break
+        if include_logs:
+            for name in ("wait-postgres", "pip-req", "odoo"):
+                snippet = odoo_container_tail(namespace, release, name)
+                if snippet:
+                    container = name
+                    break
         text = _progress_block(table, container, snippet)
         if use_tty:
             printed_lines = _replace_progress_block(text, printed_lines, stream)
@@ -201,7 +219,6 @@ def run_while_showing_progress(
             log(text)
             last_text = text
 
-    snapshot()
     while not done.wait(interval):
         snapshot()
     snapshot()

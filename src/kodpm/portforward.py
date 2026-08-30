@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -7,11 +8,12 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from kodpm.kube import run_while_showing_progress
 from kodpm.proc import run, which
 from kodpm.project import ProjectFiles
 from kodpm.secrets import kodpm_dir
 
-WAIT_TIMEOUT_SEC = 180
+WAIT_TIMEOUT_SEC = 300
 FORWARD_RETRIES = 8
 FORWARD_RETRY_SEC = 3
 
@@ -66,19 +68,30 @@ def wait_extra_deployments(
     names = [f"deploy/{release}-{item.get('name')}" for item in extras if item.get("name")]
     if not names:
         return True
-    log(f"  ожидание extra-сервисов ({len(names)}, до {timeout}s)…")
-    result = run(
-        [
-            "kubectl",
-            "wait",
-            *names,
-            "-n",
-            namespace,
-            "--for=condition=available",
-            f"--timeout={timeout}s",
-        ],
-        check=False,
-        capture=True,
+    log(f"  ожидание extra-сервисов ({len(names)}, до {timeout}s); прогресс каждые ~15 с")
+
+    def _wait():
+        return run(
+            [
+                "kubectl",
+                "wait",
+                *names,
+                "-n",
+                namespace,
+                "--for=condition=available",
+                f"--timeout={timeout}s",
+            ],
+            check=False,
+            capture=True,
+        )
+
+    result = run_while_showing_progress(
+        _wait,
+        namespace=namespace,
+        release=release,
+        log=log,
+        include_logs=False,
+        hide_prefixes=(f"{release}-odoo", f"{release}-postgres", f"{release}-minio"),
     )
     if result.returncode != 0:
         log("  не все extra-сервисы Ready — пробуем port-forward по тем, что уже бегут")
@@ -137,4 +150,97 @@ def start_extra_port_forwards(
         spec["urls"] = urls
         started.append(spec)
         log(f"  {', '.join(urls)} → svc/{svc}")
+    for line in extra_launch_summary_lines(
+        extras,
+        started,
+        extra_pod_status(namespace, release, extras),
+    ):
+        log(line)
     return started
+
+
+def parse_extra_pod_status(doc: dict[str, Any], names: list[str]) -> dict[str, dict[str, Any]]:
+    rows = {name: {"ready": False, "reason": "нет пода"} for name in names}
+    for item in doc.get("items") or []:
+        labels = (item.get("metadata") or {}).get("labels") or {}
+        component = str(labels.get("app.kubernetes.io/component") or "")
+        if not component.startswith("extra-"):
+            continue
+        name = component.removeprefix("extra-")
+        if name not in rows:
+            continue
+        status = item.get("status") or {}
+        ready = any(
+            cond.get("type") == "Ready" and cond.get("status") == "True"
+            for cond in status.get("conditions") or []
+        )
+        reason = str(status.get("phase") or "?")
+        for container in status.get("containerStatuses") or []:
+            state = container.get("state") or {}
+            waiting = state.get("waiting") or {}
+            terminated = state.get("terminated") or {}
+            if waiting.get("reason"):
+                reason = str(waiting["reason"])
+            elif terminated.get("reason"):
+                reason = str(terminated["reason"])
+        rows[name] = {"ready": ready, "reason": "Running" if ready else reason}
+    return rows
+
+
+def extra_pod_status(
+    namespace: str,
+    release: str,
+    extras: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    names = [str(item.get("name")) for item in extras if item.get("name")]
+    if not names:
+        return {}
+    result = run(
+        [
+            "kubectl",
+            "get",
+            "pods",
+            "-n",
+            namespace,
+            "-l",
+            f"app.kubernetes.io/instance={release}",
+            "-o",
+            "json",
+        ],
+        check=False,
+        capture=True,
+    )
+    try:
+        doc = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError:
+        doc = {}
+    if not isinstance(doc, dict):
+        doc = {}
+    return parse_extra_pod_status(doc, names)
+
+
+def extra_launch_summary_lines(
+    extras: list[dict[str, Any]],
+    started: list[dict[str, Any]],
+    statuses: dict[str, dict[str, Any]],
+) -> list[str]:
+    names = [str(item.get("name")) for item in extras if item.get("name")]
+    if not names:
+        return []
+    started_names = {str(item.get("name")) for item in started}
+    ready_names = [name for name in names if (statuses.get(name) or {}).get("ready")]
+    lines = [
+        f"Итог extra: {len(names)} сервисов, поды Ready {len(ready_names)}/{len(names)}, "
+        f"port-forward {len(started_names)}/{len(names)}"
+    ]
+    for name in names:
+        status = statuses.get(name) or {}
+        if status.get("ready") and name in started_names:
+            continue
+        reason = status.get("reason") or "нет пода"
+        port = "порт открыт" if name in started_names else "без порта"
+        if status.get("ready"):
+            lines.append(f"  {name}: Ready, {port}")
+        else:
+            lines.append(f"  {name}: {reason}, {port}")
+    return lines
