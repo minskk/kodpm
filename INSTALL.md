@@ -15,6 +15,46 @@ uname -m
 
 ---
 
+## Шпаргалка: запуск проекта с нуля
+
+Инструменты (Docker, k3d, kubectl, Helm) и venv kodpm — разделы 1–7 ниже. Дальше — из **пустой папки внутри `$HOME`**.
+
+```bash
+mkdir -p ~/projects/myapp && cd ~/projects/myapp
+source ~/projects/kodpm/.venv/bin/activate
+
+# файлы + клон developing (визард не нужен, если в репо уже есть odpm.json)
+kodpm --init git@github.com:org/repo.git --branch 17.0-dev --skip-start
+
+# если в odpm.json есть scenarios.developer.secrets
+cp .kodpm/secrets.example.json .kodpm/secrets.json
+# заполнить ключи
+
+# up сам кластер не создаёт
+kodpm cluster init
+
+# клоны addons, pip на хосте, образы → k3d, Helm, port-forward extra
+kodpm -d odoo up
+
+# модули (Job, не в бегущем поде)
+kodpm -d odoo modules install
+```
+
+Без `--skip-start` `--init` сам спросит про установку и вызовет `cluster init` + `up`. Модули тогда отдельно или сразу `-i`:
+
+```bash
+kodpm --init git@github.com:org/repo.git --branch 17.0-dev
+# подтвердить установку
+kodpm -d odoo modules install
+# или: kodpm -d odoo up -i
+```
+
+UI: `http://<имя-папки>.127.0.0.1.nip.io` (каталог `kodpm_autoparts` → <http://kodpm-autoparts.127.0.0.1.nip.io>).
+
+`up` сам: клоны в `~/projects/kodpm_data`, pip в `.kodpm/pip-packages`, образы в k3d, дампы MinIO в `odoo_backups`, extra-сервисы на `127.0.0.1:<порт>` из `odpm.json`. Локальный образ вроде `autoparts_env:emulator` должен уже быть в Docker на хосте. Только ядро: `kodpm -d odoo up --no-extras`. Снять стек: `kodpm down`.
+
+---
+
 ## 1. Docker
 
 k3d поднимает Kubernetes внутри Docker.
@@ -193,7 +233,7 @@ kodpm -d odoo up
 1. Пишется ODPM v2 `odpm.json` (в клон developing + симлинк в корне) либо используется уже существующий манифест. `user_settings.json`, пустой `requirements.txt`, `odoo.conf` (или `{platform}.conf`) и `values.local.yaml` дописываются, если их нет. Старые проекты с `kodpm.json` по-прежнему читаются.
 2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `https://github.com/odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
 3. Каждый репозиторий addons и `service_sources` клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
-4. Без `--skip-start` поднимаются кластер k3d (если ещё нет) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; порты на хосте — через `kubectl port-forward`.
+4. Без `--skip-start` поднимаются кластер k3d (если ещё нет) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; после `up` kodpm поднимает `kubectl port-forward` на `127.0.0.1` (останавливает `kodpm down`).
 
 `odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). В него же попадают `scenarios.developer.odoo_conf.options` из `odpm.json` addons, если ключа ещё нет (например `server_wide_modules`). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Пакеты Python ставятся из `odpm.json` addons (`scenarios.developer.requirements`); файлы `requirements.txt` не читаются.
 

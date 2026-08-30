@@ -120,8 +120,14 @@ def extra_service_values(project: ProjectFiles) -> list[dict[str, Any]]:
             pair = parse_port_pair(item)
             if not pair:
                 continue
-            _host, container = pair
-            ports.append({"name": f"p{container}"[:15], "containerPort": container})
+            host, container = pair
+            ports.append(
+                {
+                    "name": f"p{container}"[:15],
+                    "containerPort": container,
+                    "hostPort": host,
+                }
+            )
         volumes: list[dict[str, str]] = []
         for index, item in enumerate(spec.get("volumes") or []):
             parsed = parse_volume(item)
@@ -167,12 +173,11 @@ def extra_service_warnings(project: ProjectFiles) -> list[str]:
     from kodpm.values import sanitize_release
 
     warnings: list[str] = []
-    hooks = project.chosen_scenario().get("hooks")
-    if isinstance(hooks, dict) and hooks.get("post_prepare"):
-        warnings.append(
-            "hooks.post_prepare из odpm.json пропущены (docker). "
-            "Нужные образы должны быть доступны k3d (например k3d image import)."
-        )
+    from kodpm.images import images_from_docker_hooks, post_prepare_commands
+
+    _hook_images, leftover_hooks = images_from_docker_hooks(post_prepare_commands(project))
+    for cmd in leftover_hooks:
+        warnings.append(f"hooks.post_prepare пропущен: {' '.join(cmd)}")
     release = sanitize_release(project.name)
     for name, spec in scenario_services(project).items():
         if not isinstance(spec, dict):

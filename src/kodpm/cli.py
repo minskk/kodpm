@@ -49,6 +49,8 @@ from kodpm.project import (
 from kodpm.secrets import prepare_addon_secrets
 from kodpm.sources import cache_dirname, clone_or_update, default_data_dir, ensure_symlink, sync_project_sources
 from kodpm.hostpip import install_host_pip
+from kodpm.images import ensure_cluster_images
+from kodpm.portforward import start_extra_port_forwards, stop_extra_port_forwards
 from kodpm.values import build_values, dump_values, namespace_of, release_name
 
 _ROOT_COMMANDS = {
@@ -156,6 +158,13 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     values = _sync_layout(ctx) if not dry_run else _values(ctx)
     if ctx.obj["profile"] == "local" and not dry_run:
         install_host_pip(_project(ctx), values, log=click.echo)
+        click.echo("Образы Docker → k3d…")
+        ensure_cluster_images(
+            _project(ctx),
+            values,
+            extras=not ctx.obj.get("no_extras"),
+            log=click.echo,
+        )
     values_file = _values_file(values)
     release = _release(ctx)
     namespace = _ns(ctx, values)
@@ -220,17 +229,14 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if host:
         click.echo(f"URL: http://{host}")
     if extras:
-        click.echo("Extra services (cluster DNS; port-forward to open on the host):")
-        for item in extras:
-            name = item.get("name")
-            ports = item.get("ports") or []
-            svc = f"{release}-{name}"
-            if ports:
-                for port in ports:
-                    container = port.get("containerPort")
-                    click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} {container}:{container}")
-            else:
-                click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} 80:80")
+        click.echo("Extra services on 127.0.0.1:")
+        start_extra_port_forwards(
+            _project(ctx),
+            namespace,
+            release,
+            extras,
+            log=click.echo,
+        )
         for warning in extra_service_warnings(_project(ctx)):
             click.echo(warning)
 
@@ -622,6 +628,7 @@ def down(ctx: click.Context, profile: str | None) -> None:
     """Uninstall the Helm release (PVCs may remain)."""
     _apply_profile(ctx, profile)
     values = _values(ctx)
+    stop_extra_port_forwards(_project(ctx))
     helm_uninstall(_release(ctx), _ns(ctx, values))
     click.echo("Release uninstalled.")
 

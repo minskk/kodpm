@@ -69,6 +69,7 @@ kodpm up --dry-run
 kodpm --init [URL] [--branch X] [--skip-start]
 kodpm -d NAME up            # helm up (required; -d alone is not enough)
 kodpm -d NAME up --no-extras  # without odpm.json extra services
+# local up also docker pull + ctr-import into k3d (core and extra images)
 kodpm -d NAME up -i         # up, then install init_modules
 kodpm -d NAME modules install | update
 kodpm init                  # wizard synonym

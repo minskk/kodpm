@@ -71,6 +71,7 @@ kodpm up --dry-run
 kodpm --init [URL] [--branch X] [--skip-start]
 kodpm -d NAME up            # helm up (нужна подкоманда up; одного -d мало)
 kodpm -d NAME up --no-extras  # без extra-сервисов из odpm.json
+# local up: docker pull на хосте и импорт в k3d (ядро и extra-образы)
 kodpm -d NAME up -i         # up, затем install init_modules
 kodpm -d NAME modules install | update
 kodpm init                  # синоним визарда

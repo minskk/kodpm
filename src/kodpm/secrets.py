@@ -124,7 +124,7 @@ def write_json(path: Path, payload: dict[str, Any], mode: int = 0o600) -> None:
 
 def ensure_kodpm_gitignore(project: ProjectFiles) -> None:
     path = kodpm_dir(project) / ".gitignore"
-    entries = ["secrets.json", "runtime/"]
+    entries = ["secrets.json", "runtime/", "port-forwards/"]
     existing = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
     merged = list(existing)
     for entry in entries:

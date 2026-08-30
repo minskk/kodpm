@@ -89,6 +89,7 @@ def test_extra_service_values_image_ports_env(tmp_path: Path, monkeypatch):
     mailpit = services["mailpit"]
     assert mailpit["image"] == "axllent/mailpit"
     assert [port["containerPort"] for port in mailpit["ports"]] == [8025, 1025]
+    assert [port["hostPort"] for port in mailpit["ports"]] == [8025, 1025]
     assert mailpit["env"]["MP_MAX_MESSAGES"] == "5000"
     assert mailpit["volumes"][0]["mountPath"] == "/data"
     assert mailpit["volumes"][0]["hostPath"].endswith("app/data/mailpit/data")
@@ -104,7 +105,7 @@ def test_extra_service_values_image_ports_env(tmp_path: Path, monkeypatch):
 def test_extra_service_warnings(tmp_path: Path, monkeypatch):
     project = _project_with_services(tmp_path, monkeypatch)
     warnings = extra_service_warnings(project)
-    assert any("hooks.post_prepare" in item for item in warnings)
+    assert not any("пропущены (docker)" in item for item in warnings)
     assert any("outside" in item and "$HOME" in item for item in warnings)
 
 
