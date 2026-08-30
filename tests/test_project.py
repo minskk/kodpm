@@ -19,6 +19,12 @@ def test_parse_git_link():
     parsed = parse_git_link("https://github.com/OCA/web.git 17.0")
     assert parsed["name"] == "web"
     assert parsed["branch"] == "17.0"
+    no_default = parse_git_link(
+        "git@github.com:digital-autoparts/digital-autoparts-env.git",
+        default_branch="",
+    )
+    assert no_default["name"] == "digital-autoparts-env"
+    assert no_default["branch"] == ""
 
 
 def test_parse_dependencies_mixed():

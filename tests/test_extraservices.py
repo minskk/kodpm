@@ -61,7 +61,7 @@ def _project_with_services(tmp_path: Path, monkeypatch) -> ProjectFiles:
     project_dir = home / "projects" / "app"
     data = home / "projects" / "kodpm_data"
     project_dir.mkdir(parents=True)
-    (data / "digital-autoparts-env-17.0").mkdir(parents=True)
+    (data / "digital-autoparts-env").mkdir(parents=True)
     monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
     monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
     write_project_files(project_dir, V2_WITH_SERVICES, build_user_settings("base"))
@@ -79,7 +79,7 @@ def test_interpolate_service_and_source(tmp_path: Path, monkeypatch):
     assert interpolate("http://${@service:odoo}:8069", project, release) == "http://app-odoo:8069"
     assert interpolate("${@service:db1}", project, release) == "app-db1"
     mapped = interpolate("${@source:digital_autoparts_env}", project, release)
-    assert mapped.endswith("kodpm_data/digital-autoparts-env-17.0")
+    assert mapped.endswith("kodpm_data/digital-autoparts-env")
     assert mapped.startswith("/host-home/")
 
 
@@ -113,6 +113,7 @@ def test_service_source_repos(tmp_path: Path, monkeypatch):
     repos = service_source_repos(project)
     assert repos[0]["name"] == "digital-autoparts-env"
     assert repos[0]["url"].endswith("digital-autoparts-env.git")
+    assert repos[0]["branch"] == ""
 
 
 @pytest.mark.skipif(__import__("shutil").which("helm") is None, reason="helm not installed")

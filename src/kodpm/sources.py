@@ -18,6 +18,8 @@ def default_data_dir() -> Path:
 
 def cache_dirname(name: str, branch: str) -> str:
     safe_name = "".join(ch if ch.isalnum() or ch in "-._" else "-" for ch in name)
+    if not (branch or "").strip():
+        return safe_name
     safe_branch = "".join(ch if ch.isalnum() or ch in "-._" else "-" for ch in branch)
     return f"{safe_name}-{safe_branch}"
 
@@ -58,12 +60,20 @@ def ensure_readable_tree(path: Path) -> None:
 def clone_or_update(url: str, dest: Path, branch: str) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if (dest / ".git").is_dir():
-        run(["git", "-C", str(dest), "fetch", "--depth", "1", "origin", branch])
-        run(["git", "-C", str(dest), "checkout", "-B", branch, "FETCH_HEAD"])
+        if branch:
+            run(["git", "-C", str(dest), "fetch", "--depth", "1", "origin", branch])
+            run(["git", "-C", str(dest), "checkout", "-B", branch, "FETCH_HEAD"])
+        else:
+            run(["git", "-C", str(dest), "fetch", "--depth", "1"])
+            run(["git", "-C", str(dest), "pull", "--ff-only"])
         return
     if dest.exists() and any(dest.iterdir()):
         raise ToolError(f"Refusing to clone into non-empty directory {dest}")
-    run(["git", "clone", "--progress", "--depth", "1", "--branch", branch, url, str(dest)])
+    cmd = ["git", "clone", "--progress", "--depth", "1"]
+    if branch:
+        cmd.extend(["--branch", branch])
+    cmd.extend([url, str(dest)])
+    run(cmd)
 
 
 def core_source(project: ProjectFiles) -> tuple[str, str, str] | None:
@@ -186,9 +196,10 @@ def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
         if name in cloned:
             continue
         url = str(repo["url"])
-        branch = str(repo.get("branch") or project.odoo_version)
+        branch = str(repo.get("branch") or "")
         dest = data / cache_dirname(name, branch)
-        log(f"Service source: {url} ({branch}) → {dest}")
+        shown = branch or "default"
+        log(f"Service source: {url} ({shown}) → {dest}")
         clone_or_update(url, dest, branch)
         ensure_readable_tree(dest)
         ensure_symlink(project.project_dir / name, dest)

@@ -28,7 +28,7 @@ def scenario_service_sources(project: ProjectFiles) -> dict[str, str]:
 def service_source_repos(project: ProjectFiles) -> list[dict[str, str]]:
     repos: list[dict[str, str]] = []
     for raw in scenario_service_sources(project).values():
-        repos.append(parse_git_link(raw, default_branch=project.odoo_version))
+        repos.append(parse_git_link(raw, default_branch=""))
     return repos
 
 
@@ -37,7 +37,7 @@ def _source_host_path(project: ProjectFiles, name: str) -> str:
 
     parsed = parse_git_link(
         scenario_service_sources(project).get(name) or name,
-        default_branch=project.odoo_version,
+        default_branch="",
     )
     dest = default_data_dir() / cache_dirname(parsed["name"], parsed["branch"])
     mapped = host_home_path(dest)

@@ -13,7 +13,7 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 | Addon `odpm.json` → `scenarios.developer.requirements` | Extra pip packages installed on `up` / module jobs (`requirements.txt` is ignored) |
 | Addon `odpm.json` → `scenarios.developer.odoo_conf.options` | Merged into `odoo.conf` when the key is not already set (`server_wide_modules`, …) |
 | Addon / root `odpm.json` → `scenarios.developer.services` | Extra Deployments + Services in the Helm release |
-| Addon / root `odpm.json` → `scenarios.developer.service_sources` | Extra git clones (same as addons), used by `${@source:NAME}` |
+| Addon / root `odpm.json` → `scenarios.developer.service_sources` | Extra git clones (same as addons), used by `${@source:NAME}`. Branch from `URL branch` if given, otherwise the remote default HEAD (not `odoo_version`) |
 | `.kodpm/secrets.json` (or `.odpm/secrets.json`) | Module secrets → `/run/odpm/secrets.json` and generated `*/data/secret.xml` |
 | `.env` (`BACKUP_DIR`, ports, …) | Profile YAML + cluster port mapping (k3d `:80`) |
 | `docker-compose.yml` (generated) | Chart `charts/odoo-instance` |

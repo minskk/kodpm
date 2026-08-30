@@ -18,10 +18,15 @@ def load_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def parse_git_link(link: str, default_branch: str = "master") -> dict[str, str]:
+def parse_git_link(link: str, default_branch: str | None = "master") -> dict[str, str]:
     parts = link.split()
     url = parts[0]
-    branch = parts[1] if len(parts) > 1 else (default_branch or "master")
+    if len(parts) > 1:
+        branch = parts[1]
+    elif default_branch:
+        branch = default_branch
+    else:
+        branch = ""
     name = url.rstrip("/").rsplit("/", 1)[-1]
     if name.endswith(".git"):
         name = name[:-4]

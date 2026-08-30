@@ -8,6 +8,7 @@ from kodpm.sources import cache_dirname, collect_addon_repos, ensure_symlink, re
 def test_cache_dirname():
     assert cache_dirname("odoo", "17.0") == "odoo-17.0"
     assert cache_dirname("OCA/web", "17.0") == "OCA-web-17.0"
+    assert cache_dirname("digital-autoparts-env", "") == "digital-autoparts-env"
 
 
 def test_relative_symlink_under_projects(tmp_path: Path):
