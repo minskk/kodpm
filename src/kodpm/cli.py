@@ -100,6 +100,7 @@ def _values(ctx: click.Context, extra: dict[str, Any] | None = None) -> dict[str
         ctx.obj["profile"],
         extra=extra,
         db_name=ctx.obj.get("db_name"),
+        extra_services=not ctx.obj.get("no_extras"),
     )
 
 
@@ -144,7 +145,11 @@ _PROFILE_OPTION = click.option(
 def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) -> None:
     if ctx.obj["profile"] == "local" and not dry_run and not ctx.obj.get("no_clone"):
         click.echo("Клонирование ядра и addons в kodpm_data…")
-        sync_project_sources(_project(ctx), log=click.echo)
+        sync_project_sources(
+            _project(ctx),
+            log=click.echo,
+            extra_sources=not ctx.obj.get("no_extras"),
+        )
     if ctx.obj["profile"] == "local" and not dry_run:
         prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _sync_layout(ctx) if not dry_run else _values(ctx)
@@ -159,6 +164,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if not dry_run:
         delete_release_jobs(namespace, release)
     extras = list(values.get("extraServices") or [])
+    if ctx.obj.get("no_extras"):
+        click.echo("Extra-сервисы из odpm.json пропущены (--no-extras).")
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
     if wait:
         click.echo("Прогресс (блок ниже обновляется на месте каждые ~15 с):")
@@ -221,8 +228,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
                     click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} {container}:{container}")
             else:
                 click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} 80:80")
-    for warning in extra_service_warnings(_project(ctx)):
-        click.echo(warning)
+        for warning in extra_service_warnings(_project(ctx)):
+            click.echo(warning)
 
 
 @click.group(cls=KodpmGroup, invoke_without_command=True)
@@ -257,6 +264,11 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
 @click.option("-i", "do_install", is_flag=True, help="Install init_modules (like odpm -i)")
 @click.option("-u", "do_update", is_flag=True, help="Update update_modules (like odpm -u)")
 @click.option("--skip-start", is_flag=True, help="Write files and clone, do not helm up (like odpm --skip-start)")
+@click.option(
+    "--no-extras",
+    is_flag=True,
+    help="Do not deploy extra containers from odpm.json (scenarios.*.services)",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -268,6 +280,7 @@ def cli(
     do_install: bool,
     do_update: bool,
     skip_start: bool,
+    no_extras: bool,
 ) -> None:
     """Kubernetes environment for Odoo and rebranded forks."""
     ctx.ensure_object(dict)
@@ -277,6 +290,7 @@ def cli(
     ctx.obj["do_install"] = do_install
     ctx.obj["do_update"] = do_update
     ctx.obj["skip_start"] = skip_start
+    ctx.obj["no_extras"] = no_extras
     ctx.obj["init_branch"] = init_branch
     if ctx.invoked_subcommand is not None:
         return
@@ -567,6 +581,12 @@ def init_project(
 @click.option("--no-clone", is_flag=True, help="Do not clone core/addons into kodpm_data")
 @click.option("-i", "do_install", is_flag=True, help="After up, install init_modules")
 @click.option("-u", "do_update", is_flag=True, help="After up, update update_modules")
+@click.option(
+    "--no-extras",
+    "up_no_extras",
+    is_flag=True,
+    help="Do not deploy extra containers from odpm.json",
+)
 @click.pass_context
 def up(
     ctx: click.Context,
@@ -576,10 +596,13 @@ def up(
     no_clone: bool,
     do_install: bool,
     do_update: bool,
+    up_no_extras: bool,
 ) -> None:
     """Install or upgrade the instance (Helm). Run from the project directory."""
     _apply_profile(ctx, profile)
     ctx.obj["no_clone"] = no_clone
+    if up_no_extras:
+        ctx.obj["no_extras"] = True
     perform_up(ctx, dry_run=dry_run, wait=wait)
     if dry_run:
         return

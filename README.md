@@ -66,6 +66,7 @@ kodpm up --dry-run
 ```
 kodpm --init [URL] [--branch X] [--skip-start]
 kodpm -d NAME up            # helm up (required; -d alone is not enough)
+kodpm -d NAME up --no-extras  # without odpm.json extra services
 kodpm -d NAME up -i         # up, then install init_modules
 kodpm -d NAME modules install | update
 kodpm init                  # wizard synonym
@@ -82,7 +83,7 @@ kodpm modules update [names]
 kodpm exec -- [odoo args...]
 ```
 
-Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`.
+Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`, `--no-extras`.
 
 Module jobs run **`--stop-after-init` in a Kubernetes Job**, not on the running Deployment (so liveness probes cannot kill a long `-u`).
 

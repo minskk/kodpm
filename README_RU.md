@@ -68,6 +68,7 @@ kodpm up --dry-run
 ```
 kodpm --init [URL] [--branch X] [--skip-start]
 kodpm -d NAME up            # helm up (нужна подкоманда up; одного -d мало)
+kodpm -d NAME up --no-extras  # без extra-сервисов из odpm.json
 kodpm -d NAME up -i         # up, затем install init_modules
 kodpm -d NAME modules install | update
 kodpm init                  # синоним визарда
@@ -84,7 +85,7 @@ kodpm modules update [names]
 kodpm exec -- [odoo args...]
 ```
 
-Необязательные глобальные флаги: `--project-dir` (по умолчанию `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`.
+Необязательные глобальные флаги: `--project-dir` (по умолчанию `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`, `--no-extras`.
 
 Установка и обновление модулей выполняются **`--stop-after-init` в Kubernetes Job**, а не на работающем Deployment (чтобы liveness-пробы не убивали долгий `-u`).
 

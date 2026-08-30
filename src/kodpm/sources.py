@@ -152,7 +152,7 @@ def core_source_dir(project: ProjectFiles) -> Path | None:
     return None
 
 
-def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
+def sync_project_sources(project: ProjectFiles, *, log=print, extra_sources: bool = True) -> list[str]:
     """Clone core and addons into KODPM_DATA_DIR and symlink them in the project root."""
     data = default_data_dir()
     data.mkdir(parents=True, exist_ok=True)
@@ -191,7 +191,7 @@ def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
 
     from kodpm.extraservices import service_source_repos
 
-    for repo in service_source_repos(project):
+    for repo in service_source_repos(project) if extra_sources else []:
         name = str(repo["name"])
         if name in cloned:
             continue

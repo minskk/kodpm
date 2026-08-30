@@ -323,6 +323,23 @@ def test_up_command_runs_stack(tmp_path: Path, monkeypatch):
     assert called[-2:] == ["up", "install"]
 
 
+def test_no_extras_flag_on_up(tmp_path: Path, monkeypatch):
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
+    seen: list[bool] = []
+
+    def fake_up(ctx, **kwargs):
+        seen.append(bool(ctx.obj.get("no_extras")))
+
+    monkeypatch.setattr("kodpm.cli.perform_up", fake_up)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path), "--no-extras", "-d", "odoo", "up"])
+    assert result.exit_code == 0, result.output
+    assert seen == [True]
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo", "up", "--no-extras"])
+    assert result.exit_code == 0, result.output
+    assert seen == [True, True]
+
+
 def test_no_project_prints_help(tmp_path: Path):
     runner = CliRunner()
     result = runner.invoke(cli, ["--project-dir", str(tmp_path)])

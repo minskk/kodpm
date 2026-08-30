@@ -194,6 +194,7 @@ def build_values(
     *,
     extra: dict[str, Any] | None = None,
     db_name: str | None = None,
+    extra_services: bool = True,
 ) -> dict[str, Any]:
     profile_values = load_profile(profile)
     version = get_version(project.odoo_version)
@@ -328,7 +329,7 @@ def build_values(
 
     from kodpm.extraservices import extra_service_values
 
-    values["extraServices"] = extra_service_values(project)
+    values["extraServices"] = extra_service_values(project) if extra_services else []
 
     merged = deep_merge(values, profile_values)
     namespace = merged.pop("namespace", None)
@@ -351,6 +352,8 @@ def build_values(
     if db_name:
         merged.setdefault("kodpm", {})["dbName"] = db_name
         merged.setdefault("kodpm", {})["runtimeDb"] = db_name
+    if not extra_services:
+        merged["extraServices"] = []
     merged.setdefault("config", {})["raw"] = compose_conf(project, merged)
     return merged
 

@@ -116,6 +116,12 @@ def test_service_source_repos(tmp_path: Path, monkeypatch):
     assert repos[0]["branch"] == ""
 
 
+def test_build_values_skips_extra_services(tmp_path: Path, monkeypatch):
+    project = _project_with_services(tmp_path, monkeypatch)
+    values = build_values(project, "local", extra_services=False)
+    assert values["extraServices"] == []
+
+
 @pytest.mark.skipif(__import__("shutil").which("helm") is None, reason="helm not installed")
 def test_helm_template_extra_service(tmp_path: Path, monkeypatch):
     import subprocess
