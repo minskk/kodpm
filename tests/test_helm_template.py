@@ -84,6 +84,8 @@ def test_helm_template_demo(tmp_path: Path):
     dupes = sorted({key for key in keys if keys.count(key) > 1})
     assert not dupes, f"duplicate odoo.conf options: {dupes}\n{conf}"
     odoo_spec = odoo["spec"]["template"]["spec"]
+    assert odoo_spec.get("dnsPolicy") == "ClusterFirst"
+    assert odoo_spec["dnsConfig"]["nameservers"] == ["8.8.8.8", "1.1.1.1"]
     assert "pip-req" in [item["name"] for item in odoo_spec.get("initContainers") or []]
     req_cm = next(
         doc

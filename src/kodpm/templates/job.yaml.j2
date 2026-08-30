@@ -19,6 +19,14 @@ spec:
         app.kubernetes.io/instance: {{ release }}
     spec:
       restartPolicy: Never
+      {% if pod_dns_nameservers %}
+      dnsPolicy: {{ pod_dns_policy }}
+      dnsConfig:
+        nameservers:
+          {% for item in pod_dns_nameservers %}
+          - {{ item | quote }}
+          {% endfor %}
+      {% endif %}
       {% if action == "backup" %}
       initContainers:
         - name: dump

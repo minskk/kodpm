@@ -141,6 +141,11 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Extra nameservers after CoreDNS (local k3d often cannot resolve the public internet).
+podDns:
+  policy: ClusterFirst
+  nameservers: []
+
 extraEnv: []
 extraArgs: []
 devMode: ""

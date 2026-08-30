@@ -40,6 +40,12 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if ((.Values.podDns).nameservers) }}
+      dnsPolicy: {{ .Values.podDns.policy | default "ClusterFirst" }}
+      dnsConfig:
+        nameservers:
+          {{- toYaml .Values.podDns.nameservers | nindent 10 }}
+      {{- end }}
       initContainers:
         {{- if .Values.postgres.enabled }}
         - name: wait-postgres

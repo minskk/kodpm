@@ -58,7 +58,9 @@ def test_prepare_writes_stub_secret_xml(tmp_path: Path, monkeypatch):
     assert secret.is_file()
     assert "<odoo" in secret.read_text(encoding="utf-8")
     assert (project_dir / ".kodpm" / "secrets.example.json").is_file()
-    assert (project_dir / ".kodpm" / "runtime" / "secrets.json").is_file()
+    runtime = project_dir / ".kodpm" / "runtime" / "secrets.json"
+    assert runtime.is_file()
+    assert runtime.stat().st_mode & 0o777 == 0o644
     assert result["enabled"] is True
     assert result["hostPath"].endswith(".kodpm/runtime/secrets.json")
 

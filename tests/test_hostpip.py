@@ -68,9 +68,14 @@ def test_install_host_pip_docker_and_stamp(tmp_path: Path, monkeypatch):
     assert dest == pip_packages_dir(project)
     docker = next(item for item in calls if item[:2] == ["docker", "run"])
     assert "--network" in docker and "host" in docker
+    assert any(item.startswith("HOST_UID=") for item in docker)
+    assert any(item.startswith("HOST_GID=") for item in docker)
+    assert "chmod" in docker[docker.index("-c") + 1]
+    assert "chown" in docker[docker.index("-c") + 1]
     assert "httpx==0.26.0" in docker
     assert "aiohttp==3.9.1" in docker
     assert docker.index("httpx==0.26.0") < docker.index("aiohttp==3.9.1")
+    assert not any(item[:1] == ["chmod"] for item in calls)
     stamp = dest / STAMP_NAME
     assert stamp.read_text(encoding="utf-8").strip() == requirements_stamp(
         "odoo:17", ["httpx==0.26.0", "aiohttp==3.9.1"]

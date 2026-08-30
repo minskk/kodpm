@@ -71,6 +71,8 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
         "pip_packages": bool((values.get("pythonRequirements") or {}).get("enabled")),
         "python_req_cm": f"{fullname}-python-req",
         "odpm_secrets_host_path": str((values.get("odpmSecrets") or {}).get("hostPath") or ""),
+        "pod_dns_policy": str((values.get("podDns") or {}).get("policy") or "ClusterFirst"),
+        "pod_dns_nameservers": list((values.get("podDns") or {}).get("nameservers") or []),
     }
     env = Environment(
         loader=FileSystemLoader(str(templates_dir())),

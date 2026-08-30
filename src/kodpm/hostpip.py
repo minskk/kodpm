@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,6 +12,7 @@ from kodpm.secrets import kodpm_dir
 STAMP_NAME = ".kodpm-requirements.sha256"
 
 _INSTALLER = """
+import os
 import subprocess
 import sys
 
@@ -24,6 +26,10 @@ for req in sys.argv[1:]:
         print(f"pip: FAILED {req} — stop", flush=True)
         sys.exit(1)
     print(f"pip: ok {req}", flush=True)
+subprocess.run(["chmod", "-R", "a+rX", dest], check=True)
+uid = os.environ.get("HOST_UID", "0")
+gid = os.environ.get("HOST_GID", "0")
+subprocess.run(["chown", "-R", f"{uid}:{gid}", dest], check=True)
 """
 
 
@@ -75,6 +81,7 @@ def install_host_pip(
     stamp = requirements_stamp(image, lines)
     stamp_path = dest / STAMP_NAME
     if stamp_path.is_file() and stamp_path.read_text(encoding="utf-8").strip() == stamp:
+        _fix_host_ownership(dest, image, log=log)
         log(f"pip: host packages already installed ({dest})")
         return dest
     log(f"pip: install {len(lines)} packages on host via {image} → {dest}")
@@ -87,6 +94,10 @@ def install_host_pip(
             "host",
             "--user",
             "0",
+            "-e",
+            f"HOST_UID={os.getuid()}",
+            "-e",
+            f"HOST_GID={os.getgid()}",
             "-v",
             f"{dest.resolve()}:/pip-packages",
             image,
@@ -102,7 +113,51 @@ def install_host_pip(
             f"pip: FAILED — host install stopped. Packages go to {dest}. "
             f"Image {image}."
         )
-    run(["chmod", "-R", "a+rX", str(dest)], check=False)
     stamp_path.write_text(stamp + "\n", encoding="utf-8")
     log(f"pip: host packages ready ({dest})")
     return dest
+
+
+def _tree_owned_by_user(dest: Path) -> bool:
+    uid = os.getuid()
+    try:
+        if dest.stat().st_uid != uid:
+            return False
+        for child in dest.iterdir():
+            if child.stat().st_uid != uid:
+                return False
+            break
+    except OSError:
+        return False
+    return True
+
+
+def _fix_host_ownership(
+    dest: Path,
+    image: str,
+    *,
+    log: Callable[[str], None],
+) -> None:
+    if _tree_owned_by_user(dest):
+        return
+    log(f"pip: fix ownership of {dest}")
+    run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--user",
+            "0",
+            "-e",
+            f"HOST_UID={os.getuid()}",
+            "-e",
+            f"HOST_GID={os.getgid()}",
+            "-v",
+            f"{dest.resolve()}:/pip-packages",
+            image,
+            "sh",
+            "-c",
+            'chmod -R a+rX /pip-packages && chown -R "${HOST_UID}:${HOST_GID}" /pip-packages',
+        ],
+        check=False,
+    )

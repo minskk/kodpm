@@ -48,6 +48,8 @@ def test_render_modules_job():
     env = {item["name"]: item.get("value") for item in container["env"]}
     assert env["MODULES"] == "sale,crm"
     assert env["MODULE_ACTION"] == "update"
+    spec = job["spec"]["template"]["spec"]
+    assert spec["dnsConfig"]["nameservers"] == ["8.8.8.8", "1.1.1.1"]
     password = next(item for item in container["env"] if item["name"] == "PASSWORD")
     assert password["valueFrom"]["secretKeyRef"]["key"] == "db-password"
 

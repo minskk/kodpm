@@ -143,7 +143,8 @@ def write_secrets_example(project: ProjectFiles, keys: list[str]) -> Path:
 
 def materialize_runtime_secrets(project: ProjectFiles, secrets: dict[str, str]) -> Path:
     path = secrets_runtime_path(project)
-    write_json(path, _normalize_payload(secrets))
+    # hostPath File is read by Odoo uid 101; 0600 on the host user is PermissionError.
+    write_json(path, _normalize_payload(secrets), mode=0o644)
     return path
 
 
