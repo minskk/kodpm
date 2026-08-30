@@ -161,7 +161,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     extras = list(values.get("extraServices") or [])
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
     if wait:
-        click.echo("Прогресс (этот лог обновляется каждые ~15 с; или другой терминал):")
+        click.echo("Прогресс (блок ниже обновляется на месте каждые ~15 с):")
         click.echo(f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release} -w")
         click.echo(
             f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},"

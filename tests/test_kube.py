@@ -1,6 +1,12 @@
+from io import StringIO
 from types import SimpleNamespace
 
-from kodpm.kube import delete_release_jobs, run_while_showing_progress, scale_odoo
+from kodpm.kube import (
+    _replace_progress_block,
+    delete_release_jobs,
+    run_while_showing_progress,
+    scale_odoo,
+)
 
 
 def test_delete_release_jobs_targets_module_actions(monkeypatch):
@@ -47,6 +53,17 @@ def test_run_while_showing_progress_prints_pods(monkeypatch):
         release="kodpm-autoparts",
         log=lines.append,
         interval=0.01,
+        tty=False,
     )
     assert any("kodpm-autoparts-odoo" in line for line in lines)
     assert any("pip install" in line for line in lines)
+
+
+def test_replace_progress_block_overwrites():
+    stream = StringIO()
+    first = _replace_progress_block("line-a\nline-b", 0, stream)
+    assert first == 2
+    assert stream.getvalue().endswith("line-a\nline-b\n")
+    _replace_progress_block("only", 2, stream)
+    assert "\033[1A\033[2K" in stream.getvalue()
+    assert stream.getvalue().endswith("only\n")

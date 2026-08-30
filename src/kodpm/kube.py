@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -132,6 +133,24 @@ def follow_job_logs(job_name: str, namespace: str, container: str = "modules") -
         time.sleep(2)
 
 
+def _progress_block(pods: str, container: str, snippet: str) -> str:
+    parts = [pods] if pods else ["(поды ещё не созданы)"]
+    if snippet:
+        parts.append(f"--- {container} ---")
+        parts.append(snippet)
+    return "\n".join(parts)
+
+
+def _replace_progress_block(text: str, prev_lines: int, stream) -> int:
+    """Overwrite the previous multi-line progress block in a TTY."""
+    lines = text.splitlines() or [""]
+    if prev_lines:
+        stream.write("\033[1A\033[2K" * prev_lines)
+    stream.write("\n".join(lines) + "\n")
+    stream.flush()
+    return len(lines)
+
+
 def run_while_showing_progress(
     work: Callable[[], Any],
     *,
@@ -139,10 +158,16 @@ def run_while_showing_progress(
     release: str,
     log: Callable[[str], None] = print,
     interval: float = 15,
+    tty: bool | None = None,
 ) -> Any:
-    """Run `work` and print pod / init-container progress until it finishes."""
+    """Run `work` and print pod / init-container progress until it finishes.
+
+    On a TTY the progress block is redrawn in place; otherwise new snapshots append.
+    """
     done = threading.Event()
     box: dict[str, Any] = {}
+    use_tty = sys.stderr.isatty() if tty is None else tty
+    stream = sys.stderr
 
     def runner() -> None:
         try:
@@ -154,25 +179,32 @@ def run_while_showing_progress(
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
-    last_pods = ""
-    last_logs = ""
+    last_text = ""
+    printed_lines = 0
 
     def snapshot() -> None:
-        nonlocal last_pods, last_logs
+        nonlocal last_text, printed_lines
         table = pods_status(namespace, release)
-        if table and table != last_pods:
-            log(table)
-            last_pods = table
-        for container in ("wait-postgres", "pip-req", "odoo"):
-            snippet = odoo_container_tail(namespace, release, container)
-            if snippet and snippet != last_logs:
-                log(f"--- {container} ---\n{snippet}")
-                last_logs = snippet
+        container = ""
+        snippet = ""
+        for name in ("wait-postgres", "pip-req", "odoo"):
+            snippet = odoo_container_tail(namespace, release, name)
+            if snippet:
+                container = name
                 break
+        text = _progress_block(table, container, snippet)
+        if use_tty:
+            printed_lines = _replace_progress_block(text, printed_lines, stream)
+            last_text = text
+            return
+        if text != last_text:
+            log(text)
+            last_text = text
 
     snapshot()
     while not done.wait(interval):
         snapshot()
+    snapshot()
     thread.join()
     if "error" in box:
         raise box["error"]
