@@ -8,6 +8,7 @@ from kodpm.iniutil import get_ini_option, set_ini_option
 from kodpm.project import ProjectFiles
 
 VALUES_LOCAL_NAME = "values.local.yaml"
+ODOO_BACKUPS_DIR = "odoo_backups"
 
 VALUES_LOCAL_TEMPLATE = """\
 # Локальные Helm values этого проекта (накладываются последними).
@@ -147,6 +148,12 @@ def sync_project_layout(
     overwrite_conf: bool = False,
 ) -> dict[str, Any]:
     """Write values.local.yaml and the platform conf file; keep values['config']['raw'] in sync."""
+    if (values.get("minio") or {}).get("hostPath"):
+        (project.project_dir / ODOO_BACKUPS_DIR).mkdir(parents=True, exist_ok=True)
+    if (values.get("pythonRequirements") or {}).get("hostPath"):
+        from kodpm.hostpip import pip_packages_dir
+
+        pip_packages_dir(project).mkdir(parents=True, exist_ok=True)
     ensure_values_local(project)
     if overwrite_conf:
         raw = render_conf_from_values(values)

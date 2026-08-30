@@ -52,6 +52,8 @@ kodpm -d odoo modules update
 kodpm -d odoo db backup --name demo
 ```
 
+On the local profile MinIO stores dumps in `{project}/odoo_backups` (hostPath). Archives are under `odoo_backups/kodpm-dumps/`. Pip extras from `odpm.json` are installed on the host (Docker + the Odoo image, host DNS) into `{project}/.kodpm/pip-packages` and mounted into the pod.
+
 UI: `http://<project-dir-name>.127.0.0.1.nip.io` (for example `http://kodpm-odoo-test.127.0.0.1.nip.io`) — DB manager password comes from `user_settings.json`.
 
 `--project-dir` is only for calling kodpm while standing in another directory. Existing demo:

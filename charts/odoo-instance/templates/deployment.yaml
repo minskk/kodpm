@@ -50,6 +50,7 @@ spec:
             - -c
             - until pg_isready -h {{ include "odoo-instance.postgresHost" . }} -U {{ .Values.postgres.user }}; do sleep 2; done
         {{- end }}
+        {{- if not .Values.pythonRequirements.hostPath }}
         - name: pip-req
           image: {{ include "odoo-instance.odooImage" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -64,6 +65,7 @@ spec:
               readOnly: true
             - name: pip-packages
               mountPath: /pip-packages
+        {{- end }}
         {{- if .Values.addons.repos }}
         - name: git-sync
           image: alpine/git:latest
@@ -219,7 +221,13 @@ spec:
           emptyDir: {}
           {{- end }}
         - name: pip-packages
+          {{- if .Values.pythonRequirements.hostPath }}
+          hostPath:
+            path: {{ .Values.pythonRequirements.hostPath | quote }}
+            type: DirectoryOrCreate
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         - name: python-req
           configMap:
             name: {{ include "odoo-instance.fullname" . }}-python-req

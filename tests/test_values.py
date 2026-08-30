@@ -35,6 +35,8 @@ def test_demo_17_local_values():
     assert values["addons"]["hostPath"]["extraPaths"] == []
     assert "data_dir" not in values["config"]["options"]
     assert values["ingress"]["host"] == "demo-17.127.0.0.1.nip.io"
+    assert values["minio"]["hostPath"].endswith("/examples/demo-17/odoo_backups")
+    assert values["minio"]["hostPath"].startswith("/host-home/")
 
 
 def test_fincomtech_values():
@@ -55,6 +57,24 @@ def test_old_version_probe():
     assert values["probes"]["type"] == "tcp"
     assert values["postgres"]["image"] == "postgres:12"
     assert "http_port" in values["config"]["options"]
+
+
+def test_local_minio_hostpath_override(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "app"
+    project_dir.mkdir(parents=True)
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    write_project_files(
+        project_dir,
+        build_kodpm_json("17.0", "odoo", []),
+        build_user_settings("base"),
+    )
+    (project_dir / "values.local.yaml").write_text(
+        "minio:\n  hostPath: \"\"\n",
+        encoding="utf-8",
+    )
+    values = build_values(ProjectFiles(project_dir), "local")
+    assert values["minio"]["hostPath"] == ""
 
 
 def test_values_local_overlay(tmp_path: Path):

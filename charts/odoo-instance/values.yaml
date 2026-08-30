@@ -114,6 +114,8 @@ minio:
   mcImage: quay.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
   rootUser: kodpm
   rootPassword: kodpmkodpm
+  # Local profile binds {project}/odoo_backups here as hostPath (empty = PVC).
+  hostPath: ""
   persistence:
     size: 20Gi
     storageClass: ""
@@ -148,5 +150,7 @@ pythonRequirements:
   enabled: false
   project: ""
   odoo: ""
+  # Local profile: host-built site-packages mounted here (empty = pip-req in the pod).
+  hostPath: ""
 
 extraServices: []

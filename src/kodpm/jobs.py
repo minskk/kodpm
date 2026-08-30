@@ -65,7 +65,10 @@ def render_job(action: str, values: dict[str, Any], **kwargs: Any) -> str:
         "host_path": host_path_cfg.get("path") if host_path_cfg.get("enabled") else "",
         "host_path_name": host_path_cfg.get("name") or "developing",
         "extra_mounts": host_path_cfg.get("extraMounts") or [],
-        "pip_req_enabled": bool((values.get("pythonRequirements") or {}).get("enabled")),
+        "pip_packages_host_path": str((values.get("pythonRequirements") or {}).get("hostPath") or ""),
+        "pip_req_enabled": bool((values.get("pythonRequirements") or {}).get("enabled"))
+        and not (values.get("pythonRequirements") or {}).get("hostPath"),
+        "pip_packages": bool((values.get("pythonRequirements") or {}).get("enabled")),
         "python_req_cm": f"{fullname}-python-req",
         "odpm_secrets_host_path": str((values.get("odpmSecrets") or {}).get("hostPath") or ""),
     }

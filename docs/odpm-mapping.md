@@ -76,7 +76,7 @@ Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`).
 | `odpm -d NAME -i` | `kodpm -d NAME up -i` or `kodpm -d NAME modules install` |
 | `odpm -d NAME -u` | `kodpm -d NAME up -u` or `kodpm -d NAME modules update` |
 | `odpm -d DB -i -u` | `kodpm -d DB modules install` then `modules update` |
-| `--db-backup` | `kodpm -d DB db backup` |
+| `--db-backup` / `BACKUP_DIR` | `kodpm -d DB db backup`; local MinIO data is `{project}/odoo_backups` |
 | `--db-restore ARCHIVE` | `kodpm -d DB db restore ARCHIVE.tar.gz` |
 | `--db-drop` | `kodpm -d DB db drop` |
 | `--get-dbs-list` | `kodpm db list` |

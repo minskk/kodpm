@@ -185,7 +185,7 @@ spec:
               value: {{ action | quote }}
             - name: MODULES
               value: {{ modules | quote }}
-            {% if pip_req_enabled %}
+            {% if pip_packages %}
             - name: PYTHONPATH
               value: /usr/lib/python3/dist-packages:/pip-packages
             {% endif %}
@@ -203,7 +203,7 @@ spec:
               mountPath: {{ data_dir }}
             - name: addons
               mountPath: /mnt/extra-addons
-            {% if pip_req_enabled %}
+            {% if pip_packages %}
             - name: pip-packages
               mountPath: /pip-packages
             {% endif %}
@@ -242,12 +242,20 @@ spec:
         - name: config
           configMap:
             name: {{ config_cm }}
-        {% if pip_req_enabled %}
+        {% if pip_packages %}
         - name: pip-packages
+          {% if pip_packages_host_path %}
+          hostPath:
+            path: {{ pip_packages_host_path | quote }}
+            type: DirectoryOrCreate
+          {% else %}
           emptyDir: {}
+          {% endif %}
+        {% if pip_req_enabled %}
         - name: python-req
           configMap:
             name: {{ python_req_cm }}
+        {% endif %}
         {% endif %}
         {% if host_path %}
         - name: developing

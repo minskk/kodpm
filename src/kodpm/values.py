@@ -7,7 +7,8 @@ from typing import Any
 import yaml
 
 from kodpm.catalog import get_platform, get_version
-from kodpm.layout import compose_conf, load_values_local
+from kodpm.hostpip import pip_packages_dir
+from kodpm.layout import ODOO_BACKUPS_DIR, compose_conf, load_values_local
 from kodpm.paths import profiles_dir
 from kodpm.project import ProjectFiles, load_json
 from kodpm.sources import addon_odpm_path, cache_dirname, collect_addon_repos, default_data_dir
@@ -166,6 +167,7 @@ def python_requirements_values(project: ProjectFiles) -> dict[str, Any]:
         "enabled": requirements_has_packages(project_text),
         "project": project_text,
         "odoo": "",
+        "hostPath": "",
     }
 
 
@@ -346,6 +348,20 @@ def build_values(
             merged.setdefault("ingress", {})["host"] = (
                 f"{sanitize_release(project.name)}.127.0.0.1.nip.io"
             )
+        if (merged.get("minio") or {}).get("enabled"):
+            local_minio = (local or {}).get("minio") or {}
+            extra_minio = ((extra or {}).get("minio") or {}) if extra else {}
+            if "hostPath" not in local_minio and "hostPath" not in extra_minio:
+                mapped = host_home_path(project.project_dir / ODOO_BACKUPS_DIR)
+                if mapped:
+                    merged.setdefault("minio", {})["hostPath"] = mapped
+        reqs = merged.setdefault("pythonRequirements", {})
+        local_req = (local or {}).get("pythonRequirements") or {}
+        extra_req = ((extra or {}).get("pythonRequirements") or {}) if extra else {}
+        if reqs.get("enabled") and "hostPath" not in local_req and "hostPath" not in extra_req:
+            mapped = host_home_path(pip_packages_dir(project))
+            if mapped:
+                reqs["hostPath"] = mapped
     if namespace:
         merged.setdefault("kodpm", {})["namespace"] = namespace
     merged.setdefault("kodpm", {})["profile"] = profile

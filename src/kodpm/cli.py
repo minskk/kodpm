@@ -48,6 +48,7 @@ from kodpm.project import (
 )
 from kodpm.secrets import prepare_addon_secrets
 from kodpm.sources import cache_dirname, clone_or_update, default_data_dir, ensure_symlink, sync_project_sources
+from kodpm.hostpip import install_host_pip
 from kodpm.values import build_values, dump_values, namespace_of, release_name
 
 _ROOT_COMMANDS = {
@@ -153,6 +154,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if ctx.obj["profile"] == "local" and not dry_run:
         prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _sync_layout(ctx) if not dry_run else _values(ctx)
+    if ctx.obj["profile"] == "local" and not dry_run:
+        install_host_pip(_project(ctx), values, log=click.echo)
     values_file = _values_file(values)
     release = _release(ctx)
     namespace = _ns(ctx, values)
@@ -812,6 +815,8 @@ def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
     if ctx.obj.get("profile") == "local":
         prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _values(ctx)
+    if ctx.obj.get("profile") == "local":
+        install_host_pip(_project(ctx), values, log=click.echo)
     fullname = _fullname(ctx, values)
     namespace = _ns(ctx, values)
     project = _project(ctx)

@@ -78,6 +78,32 @@ def test_render_modules_job_pip_req():
     assert "python-req" in vol_names
 
 
+def test_render_modules_job_host_pip():
+    values = _demo_values()
+    values["pythonRequirements"] = {
+        "enabled": True,
+        "project": "httpx==0.26.0\n",
+        "odoo": "",
+        "hostPath": "/host-home/projects/app/.kodpm/pip-packages",
+    }
+    manifest = render_job(
+        "install",
+        values,
+        job_name="demo-17-mods-in-1",
+        namespace="kodpm",
+        release="demo-17",
+        db_name="odoo",
+        modules="base",
+    )
+    job = yaml.safe_load(manifest)
+    spec = job["spec"]["template"]["spec"]
+    assert not spec.get("initContainers")
+    env = {item["name"]: item.get("value") for item in spec["containers"][0]["env"]}
+    assert env["PYTHONPATH"] == "/usr/lib/python3/dist-packages:/pip-packages"
+    pip_vol = next(vol for vol in spec["volumes"] if vol["name"] == "pip-packages")
+    assert pip_vol["hostPath"]["path"] == "/host-home/projects/app/.kodpm/pip-packages"
+
+
 def test_cli_help():
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])

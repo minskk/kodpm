@@ -69,6 +69,12 @@ spec:
             periodSeconds: 10
       volumes:
         - name: data
+          {{- if .Values.minio.hostPath }}
+          hostPath:
+            path: {{ .Values.minio.hostPath | quote }}
+            type: DirectoryOrCreate
+          {{- else }}
           persistentVolumeClaim:
             claimName: {{ include "odoo-instance.fullname" . }}-minio
+          {{- end }}
 {{- end }}

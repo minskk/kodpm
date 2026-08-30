@@ -42,6 +42,20 @@ def test_helm_template_demo(tmp_path: Path):
     assert "demo-17-postgres" in names
     assert "demo-17-minio" in names
     assert "demo-17-minio-bucket" not in names
+    minio = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "demo-17-minio"
+    )
+    minio_vol = next(
+        vol for vol in minio["spec"]["template"]["spec"]["volumes"] if vol["name"] == "data"
+    )
+    assert minio_vol["hostPath"]["path"].endswith("/examples/demo-17/odoo_backups")
+    assert not any(
+        doc.get("kind") == "PersistentVolumeClaim"
+        and doc["metadata"]["name"] == "demo-17-minio"
+        for doc in docs
+    )
     odoo = next(
         doc
         for doc in docs
@@ -128,5 +142,46 @@ def test_helm_template_pip_req(tmp_path: Path):
         if doc.get("kind") == "ConfigMap" and "pip-req.sh" in (doc.get("data") or {})
     )
     assert "pip install --target" in scripts["data"]["pip-req.sh"]
+    assert 'pip: $req' in scripts["data"]["pip-req.sh"]
+    assert "exit 1" in scripts["data"]["pip-req.sh"]
     assert "--db_password=" in scripts["data"]["modules.sh"]
     assert "PASSWORD" in scripts["data"]["modules.sh"]
+
+
+@pytest.mark.skipif(not shutil.which("helm"), reason="helm not installed")
+def test_helm_template_pip_hostpath(tmp_path: Path):
+    project = ProjectFiles(Path("examples/demo-17"))
+    values = build_values(project, "local", db_name="odoo")
+    values["pythonRequirements"] = {
+        "enabled": True,
+        "project": "httpx==0.26.0\n",
+        "odoo": "",
+        "hostPath": "/host-home/projects/app/.kodpm/pip-packages",
+    }
+    values_file = dump_values(values, tmp_path / "values.yaml")
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            release_name(project),
+            str(chart_dir()),
+            "--namespace",
+            "kodpm",
+            "-f",
+            str(values_file),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    odoo = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "demo-17-odoo"
+    )
+    spec = odoo["spec"]["template"]["spec"]
+    init_names = [item["name"] for item in spec.get("initContainers") or []]
+    assert "pip-req" not in init_names
+    pip_vol = next(vol for vol in spec["volumes"] if vol["name"] == "pip-packages")
+    assert pip_vol["hostPath"]["path"] == "/host-home/projects/app/.kodpm/pip-packages"

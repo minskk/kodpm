@@ -28,6 +28,19 @@ def test_sync_layout_writes_files(tmp_path: Path):
     assert "workers" in project.conf_path.read_text(encoding="utf-8")
 
 
+def test_sync_layout_creates_odoo_backups(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "app"
+    project_dir.mkdir(parents=True)
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    write_project_files(project_dir, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
+    project = ProjectFiles(project_dir)
+    values = build_values(project, "local")
+    assert values["minio"]["hostPath"].endswith("projects/app/odoo_backups")
+    sync_project_layout(project, values)
+    assert (project_dir / "odoo_backups").is_dir()
+
+
 def test_compose_keeps_user_option(tmp_path: Path):
     write_project_files(tmp_path, build_odoo_json(), build_user_settings("base"))
     project = ProjectFiles(tmp_path)
