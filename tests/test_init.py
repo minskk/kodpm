@@ -6,9 +6,11 @@ from click.testing import CliRunner
 from kodpm.cli import cli
 from kodpm.initproj import (
     build_kodpm_json,
+    build_odpm_v2_json,
     build_user_settings,
     normalize_addon_links,
     normalize_platform,
+    write_odpm_and_link,
     write_project_files,
     write_requirements_txt,
 )
@@ -45,19 +47,20 @@ def test_build_odpm_with_addons():
         ["https://github.com/OCA/web.git 17.0"],
     )
     assert data["odoo_version"] == "17.0"
-    assert data["platform_name"] == "odoo"
-    assert data["python_version"] == "3.10"
-    assert data["dependencies"][0]["name"] == "web"
-    assert data["dependencies"][0]["branch"] == "17.0"
+    assert data["manifest_schema"] == 2
+    assert data["python"] == "3.10"
+    assert data["developing"]["git"].endswith("web.git")
+    assert data["dependencies"] == []
     assert data["addons_branch"] == "17.0"
     custom = build_kodpm_json(
         "17.0",
         "odoo",
-        ["https://github.com/OCA/web.git"],
+        ["https://github.com/OCA/web.git", "https://github.com/OCA/queue.git"],
         addons_branch="main",
     )
     assert custom["addons_branch"] == "main"
-    assert custom["dependencies"][0]["branch"] == "main"
+    assert custom["developing"]["git"].endswith("web.git")
+    assert custom["dependencies"] == ["https://github.com/OCA/queue.git"]
 
 
 def test_build_fincomtech():
@@ -100,12 +103,11 @@ def test_init_command_writes_files(tmp_path: Path):
         ],
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
     settings = json.loads((tmp_path / "user_settings.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
     assert odpm["addons_branch"] == "17.0"
-    assert odpm["dependencies"][0]["url"].endswith("web.git")
-    assert odpm["dependencies"][0]["branch"] == "17.0"
+    assert odpm["developing"]["git"].endswith("web.git")
     assert settings["init_modules"] == "base,web,my_module"
     assert settings["db_manager_password"] == "secret"
     project = ProjectFiles(tmp_path)
@@ -145,7 +147,7 @@ def test_init_accepts_comma_version(tmp_path: Path):
         input="готово\n\n",
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
     assert odpm["odoo_version"] == "17.0"
     assert odpm["addons_branch"] == "17.0"
 
@@ -178,9 +180,9 @@ def test_init_writes_custom_addons_branch(tmp_path: Path):
         ],
     )
     assert result.exit_code == 0, result.output
-    odpm = json.loads((tmp_path / "kodpm.json").read_text(encoding="utf-8"))
+    odpm = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
     assert odpm["addons_branch"] == "main"
-    assert odpm["dependencies"][0]["branch"] == "main"
+    assert odpm["developing"]["git"].endswith("web.git")
 
 
 def test_user_settings_builder():
@@ -197,11 +199,136 @@ def test_legacy_odpm_json_is_read(tmp_path: Path):
     assert ProjectFiles(tmp_path).odoo_version == "16.0"
 
 
-def test_write_project_files_replaces_legacy_odpm(tmp_path: Path):
-    (tmp_path / "odpm.json").write_text("{}", encoding="utf-8")
+def test_write_project_files_writes_odpm_json(tmp_path: Path):
     write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
-    assert (tmp_path / "kodpm.json").is_file()
-    assert not (tmp_path / "odpm.json").exists()
+    assert (tmp_path / "odpm.json").is_file()
+    data = json.loads((tmp_path / "odpm.json").read_text(encoding="utf-8"))
+    assert data["manifest_schema"] == 2
+
+
+def test_build_odpm_v2_json_developing_and_deps():
+    data = build_odpm_v2_json(
+        "17.0",
+        "odoo",
+        "git@gitverse.ru:fincomtech/extra_module.git",
+        ["https://github.com/OCA/queue", "https://github.com/OCA/web"],
+        addons_branch="17.0-dev",
+    )
+    assert data["manifest_schema"] == 2
+    assert data["developing"]["git"].endswith("extra_module.git")
+    assert data["dependencies"] == ["https://github.com/OCA/queue", "https://github.com/OCA/web"]
+    assert data["platform"]["git"].endswith("odoo.git")
+    assert data["addons_branch"] == "17.0-dev"
+    assert "services" in data["scenarios"]["developer"]
+
+
+def test_write_odpm_and_link(tmp_path: Path):
+    repo = tmp_path / "extra_module"
+    repo.mkdir()
+    write_odpm_and_link(tmp_path, "extra_module", build_kodpm_json("17.0", "odoo", []))
+    link = tmp_path / "odpm.json"
+    assert link.is_symlink()
+    assert link.resolve() == (repo / "odpm.json").resolve()
+    assert json.loads(link.read_text(encoding="utf-8"))["manifest_schema"] == 2
+
+
+def test_init_flag_parses_url_vs_bare(monkeypatch):
+    captured: list[dict] = []
+
+    def fake_run_init(ctx, **kwargs):
+        captured.append({"init_url": kwargs.get("init_url"), "addons_branch": kwargs.get("addons_branch")})
+
+    monkeypatch.setattr("kodpm.cli.run_init", fake_run_init)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--init", "git@gitverse.ru:fincomtech/extra_module.git", "--branch", "17.0-dev"])
+    assert result.exit_code == 0, result.output
+    assert captured[-1]["init_url"] == "git@gitverse.ru:fincomtech/extra_module.git"
+    assert captured[-1]["addons_branch"] == "17.0-dev"
+    result = runner.invoke(cli, ["--init", "--skip-start"])
+    assert result.exit_code == 0, result.output
+    assert captured[-1]["init_url"] == ""
+
+
+def test_init_from_repo_symlinks_existing_odpm(tmp_path: Path, monkeypatch):
+    home = tmp_path / "user"
+    project_dir = home / "projects" / "fincom_extra"
+    data = home / "projects" / "kodpm_data"
+    project_dir.mkdir(parents=True)
+    dest = data / "extra_module-17.0-dev"
+    dest.mkdir(parents=True)
+    manifest = {
+        "manifest_schema": 2,
+        "odoo_version": "17.0",
+        "platform": {"git": "https://github.com/odoo/odoo.git"},
+        "developing": {"git": "git@gitverse.ru:fincomtech/extra_module.git"},
+        "dependencies": ["https://github.com/OCA/queue"],
+        "database": {"language": "ru_RU"},
+    }
+    (dest / "odpm.json").write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: home.resolve()))
+    monkeypatch.setenv("KODPM_DATA_DIR", str(data.resolve()))
+
+    def fake_clone(url, dest_path, branch):
+        dest_path.mkdir(parents=True, exist_ok=True)
+        if not (dest_path / "odpm.json").is_file() and dest_path == dest:
+            (dest_path / "odpm.json").write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr("kodpm.cli.clone_or_update", fake_clone)
+    monkeypatch.setattr("kodpm.sources.clone_or_update", fake_clone)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--project-dir",
+            str(project_dir),
+            "--init",
+            "git@gitverse.ru:fincomtech/extra_module.git",
+            "--branch",
+            "17.0-dev",
+            "--skip-start",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    link = project_dir / "odpm.json"
+    assert link.is_symlink()
+    assert link.resolve() == (dest / "odpm.json").resolve()
+    assert json.loads(link.read_text(encoding="utf-8"))["developing"]["git"].endswith("extra_module.git")
+    assert "Версия ядра" not in result.output
+    assert (project_dir / "user_settings.json").is_file()
+    assert (project_dir / "extra_module").is_symlink()
+
+
+def test_d_flag_without_up_prints_help(tmp_path: Path, monkeypatch):
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
+    called: list[str] = []
+    monkeypatch.setattr("kodpm.cli.perform_up", lambda ctx, **kwargs: called.append("up"))
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo"])
+    assert result.exit_code == 0, result.output
+    assert called == []
+    assert "Usage:" in result.output
+
+
+def test_up_command_runs_stack(tmp_path: Path, monkeypatch):
+    write_project_files(tmp_path, build_kodpm_json("17.0", "odoo", []), build_user_settings("base"))
+    called: list[str] = []
+    monkeypatch.setattr("kodpm.cli.perform_up", lambda ctx, **kwargs: called.append("up"))
+    monkeypatch.setattr("kodpm.cli._run_modules", lambda ctx, action, names: called.append(action))
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo", "up"])
+    assert result.exit_code == 0, result.output
+    assert called == ["up"]
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path), "-d", "odoo", "up", "-i"])
+    assert result.exit_code == 0, result.output
+    assert called[-2:] == ["up", "install"]
+
+
+def test_no_project_prints_help(tmp_path: Path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--project-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "Usage:" in result.output
+    assert "init" in result.output
 
 
 def test_write_requirements_txt_keeps_existing(tmp_path: Path):

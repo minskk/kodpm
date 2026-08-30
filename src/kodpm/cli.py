@@ -17,6 +17,7 @@ from kodpm.kube import delete_release_jobs, exec_in, kubectl, rollout_odoo, scal
 from kodpm.proc import ToolError
 from kodpm.catalog import resolve_odoo_version
 from kodpm.layout import ensure_values_local, sync_project_layout
+from kodpm.extraservices import extra_service_warnings
 from kodpm.initproj import (
     DONE_TOKENS,
     build_kodpm_json,
@@ -25,12 +26,60 @@ from kodpm.initproj import (
     known_versions,
     normalize_addon_links,
     normalize_platform,
+    write_json,
+    write_odpm_and_link,
     write_project_files,
+    write_requirements_txt,
 )
-from kodpm.project import LEGACY_PROJECT_JSON_NAME, PROJECT_JSON_NAME, ProjectFiles, parse_modules
+from kodpm.project import (
+    ODPM_JSON_NAME,
+    PROJECT_JSON_NAME,
+    ProjectFiles,
+    load_json,
+    parse_git_link,
+    parse_modules,
+)
 from kodpm.secrets import prepare_addon_secrets
-from kodpm.sources import sync_project_sources
+from kodpm.sources import cache_dirname, clone_or_update, default_data_dir, ensure_symlink, sync_project_sources
 from kodpm.values import build_values, dump_values, namespace_of, release_name
+
+_ROOT_COMMANDS = {
+    "init",
+    "up",
+    "down",
+    "status",
+    "cluster",
+    "config",
+    "db",
+    "modules",
+    "exec",
+    "values",
+}
+
+
+def _rewrite_init_args(args: list[str]) -> list[str]:
+    """Turn `--init URL` into `--init=URL` and bare `--init` into `--init=`."""
+    out: list[str] = []
+    index = 0
+    while index < len(args):
+        item = args[index]
+        if item == "--init":
+            nxt = args[index + 1] if index + 1 < len(args) else None
+            if nxt and not nxt.startswith("-") and nxt not in _ROOT_COMMANDS:
+                out.append(f"--init={nxt}")
+                index += 2
+                continue
+            out.append("--init=")
+            index += 1
+            continue
+        out.append(item)
+        index += 1
+    return out
+
+
+class KodpmGroup(click.Group):
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        return super().parse_args(ctx, _rewrite_init_args(list(args)))
 
 
 def _project(ctx: click.Context) -> ProjectFiles:
@@ -118,9 +167,24 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     click.echo(f"Release {release} is installed.")
     if host:
         click.echo(f"URL: http://{host}")
+    extras = values.get("extraServices") or []
+    if extras:
+        click.echo("Extra services (cluster DNS; port-forward to open on the host):")
+        for item in extras:
+            name = item.get("name")
+            ports = item.get("ports") or []
+            svc = f"{release}-{name}"
+            if ports:
+                for port in ports:
+                    container = port.get("containerPort")
+                    click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} {container}:{container}")
+            else:
+                click.echo(f"  kubectl port-forward -n {namespace} svc/{svc} 80:80")
+    for warning in extra_service_warnings(_project(ctx)):
+        click.echo(warning)
 
 
-@click.group()
+@click.group(cls=KodpmGroup, invoke_without_command=True)
 @click.version_option(__version__, prog_name="kodpm")
 @click.option(
     "--project-dir",
@@ -142,13 +206,49 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     default=None,
     help="Pin this Odoo database (db_name/dbfilter). Without -d the database manager is used.",
 )
+@click.option(
+    "--init",
+    "init_link",
+    default=None,
+    help="Init from developing git URL (like odpm --init). Bare --init starts the wizard.",
+)
+@click.option("--branch", "init_branch", default=None, help="With --init: branch of the developing repo")
+@click.option("-i", "do_install", is_flag=True, help="Install init_modules (like odpm -i)")
+@click.option("-u", "do_update", is_flag=True, help="Update update_modules (like odpm -u)")
+@click.option("--skip-start", is_flag=True, help="Write files and clone, do not helm up (like odpm --skip-start)")
 @click.pass_context
-def cli(ctx: click.Context, project_dir: Path, profile: str, db_name: str | None) -> None:
+def cli(
+    ctx: click.Context,
+    project_dir: Path,
+    profile: str,
+    db_name: str | None,
+    init_link: str | None,
+    init_branch: str | None,
+    do_install: bool,
+    do_update: bool,
+    skip_start: bool,
+) -> None:
     """Kubernetes environment for Odoo and rebranded forks."""
     ctx.ensure_object(dict)
     ctx.obj["project_dir"] = project_dir.resolve()
     ctx.obj["profile"] = profile.lower()
     ctx.obj["db_name"] = db_name
+    ctx.obj["do_install"] = do_install
+    ctx.obj["do_update"] = do_update
+    ctx.obj["skip_start"] = skip_start
+    ctx.obj["init_branch"] = init_branch
+    if ctx.invoked_subcommand is not None:
+        return
+    if init_link is not None:
+        run_init(
+            ctx,
+            init_url=init_link,
+            addons_branch=init_branch,
+            no_up=skip_start,
+            overwrite=False,
+        )
+        return
+    click.echo(ctx.get_help())
 
 
 @cli.group()
@@ -177,18 +277,209 @@ def cluster_delete(name: str) -> None:
     click.echo(f"Deleted cluster {name}")
 
 
+def _clone_developing(project_dir: Path, url: str, branch: str, log=click.echo) -> tuple[str, Path]:
+    parsed = parse_git_link(url, default_branch=branch)
+    dest = default_data_dir() / cache_dirname(parsed["name"], parsed["branch"])
+    log(f"Developing: {parsed['url']} ({parsed['branch']}) → {dest}")
+    clone_or_update(parsed["url"], dest, parsed["branch"])
+    ensure_symlink(project_dir / parsed["name"], dest)
+    log(f"Ссылка: {project_dir / parsed['name']} → {dest}")
+    return parsed["name"], dest
+
+
+def run_init(
+    ctx: click.Context,
+    *,
+    init_url: str = "",
+    addons: tuple[str, ...] = (),
+    addons_branch: str | None = None,
+    odoo_version: str | None = None,
+    platform: str | None = None,
+    modules: str | None = None,
+    image: str | None = None,
+    odoo_git_link: str | None = None,
+    db_lang: str | None = None,
+    admin_password: str | None = None,
+    no_up: bool = False,
+    no_clone: bool = False,
+    overwrite: bool = False,
+) -> None:
+    """Create the project layout from a developing repo or the wizard."""
+    project_dir = Path(ctx.obj["project_dir"])
+    versions = ", ".join(known_versions())
+    platforms = ", ".join(p for p in known_platforms() if p != "custom")
+    click.echo(f"Проект kodpm: {project_dir}")
+
+    developing_url = str(init_url or "").strip()
+    extra_links = list(addons)
+    if developing_url:
+        extra_links = [developing_url, *extra_links]
+
+    if not extra_links and not developing_url:
+        click.echo("Репозитории. Первый — разрабатываемый проект, остальные — dependencies.")
+        click.echo("Формат: URL или URL ветка. «готово» — закончить.")
+        while True:
+            line = click.prompt("  git", default="готово", show_default=True)
+            text = str(line).strip()
+            if text.lower() in DONE_TOKENS:
+                break
+            extra_links.append(text)
+            click.echo(f"    добавлен {text}")
+
+    if addons_branch is None:
+        addons_branch = ctx.obj.get("init_branch")
+    if addons_branch is None and extra_links:
+        default_branch = odoo_version or "17.0"
+        if click.get_text_stream("stdin").isatty():
+            addons_branch = click.prompt("Ветка addons", default=default_branch)
+        else:
+            addons_branch = default_branch
+    addons_branch = str(addons_branch or odoo_version or "17.0").strip()
+
+    cloned_name = ""
+    cloned_odpm: dict[str, Any] | None = None
+    if extra_links and not no_clone:
+        first = parse_git_link(extra_links[0], default_branch=addons_branch)
+        cloned_name, dest = _clone_developing(project_dir, first["url"], first["branch"])
+        cloned_data = load_json(dest / ODPM_JSON_NAME)
+        cloned_odpm = cloned_data or None
+
+    skip_wizard = bool(cloned_odpm)
+
+    if not skip_wizard:
+        while True:
+            if odoo_version is None:
+                odoo_version = click.prompt(f"Версия ядра ({versions})", default="17.0")
+            try:
+                odoo_version = resolve_odoo_version(odoo_version)
+                break
+            except KeyError as exc:
+                click.echo(str(exc))
+                odoo_version = None
+        if platform is None:
+            platform = click.prompt(f"Наименование ядра ({platforms})", default="odoo")
+        platform = normalize_platform(platform)
+        image_val = image or ""
+        git_val = odoo_git_link or ""
+        if platform != "odoo":
+            if image is None:
+                image_val = click.prompt(
+                    "Образ ядра (registry/name:tag, пусто — пропустить)",
+                    default="",
+                    show_default=False,
+                )
+            if odoo_git_link is None:
+                git_val = click.prompt(
+                    "Git-репозиторий ядра (пусто — пропустить)",
+                    default="",
+                    show_default=False,
+                )
+        if modules is None:
+            modules = click.prompt("Модули для установки (-i)", default="base,web")
+        if db_lang is None:
+            db_lang = click.prompt("Язык базы", default="ru_RU")
+        if admin_password is None:
+            admin_password = click.prompt("Пароль admin / менеджера БД", default="admin")
+        extra_links = normalize_addon_links(extra_links, addons_branch)
+        odpm = build_kodpm_json(
+            odoo_version,
+            platform,
+            extra_links,
+            image=image_val,
+            odoo_git_link=git_val,
+            addons_branch=addons_branch,
+        )
+    else:
+        odpm = cloned_odpm or {}
+        odoo_version = str(odpm.get("odoo_version") or "17.0")
+        platform = normalize_platform(str(odpm.get("platform_name") or "odoo"))
+        if modules is None:
+            modules = "base,web"
+        if db_lang is None:
+            database = odpm.get("database") if isinstance(odpm.get("database"), dict) else {}
+            db_lang = str((database or {}).get("language") or "ru_RU")
+        if admin_password is None:
+            admin_password = "admin"
+
+    settings = build_user_settings(
+        modules or "base,web",
+        db_lang=db_lang or "ru_RU",
+        db_country_code="ru" if str(db_lang or "").startswith("ru") else False,
+        admin_password=admin_password or "admin",
+        dev_mode="reload,xml" if ctx.obj["profile"] == "local" else "",
+        addons_branch=addons_branch,
+    )
+    settings_path = project_dir / "user_settings.json"
+    existing = [path for path in (project_dir / ODPM_JSON_NAME, project_dir / PROJECT_JSON_NAME, settings_path) if path.exists()]
+    if existing and not overwrite and not skip_wizard:
+        if not click.confirm("Файлы проекта уже есть. Перезаписать?", default=False):
+            raise click.Abort()
+
+    if cloned_name:
+        target = project_dir / cloned_name / ODPM_JSON_NAME
+        if skip_wizard:
+            link = project_dir / ODPM_JSON_NAME
+            if link.is_symlink() or link.is_file():
+                link.unlink()
+            ensure_symlink(link, target, directory=False)
+        else:
+            write_odpm_and_link(project_dir, cloned_name, odpm)
+        if not settings_path.exists() or overwrite:
+            write_json(settings_path, settings)
+            write_requirements_txt(project_dir)
+    else:
+        write_project_files(project_dir, odpm, settings)
+
+    project = ProjectFiles(project_dir)
+    _sync_layout(ctx, overwrite_conf=overwrite)
+    click.echo(
+        "Записано: "
+        + ", ".join(
+            [
+                ODPM_JSON_NAME,
+                settings_path.name,
+                project.requirements_path.name,
+                project.conf_name,
+                project.values_local_path.name,
+            ]
+        )
+    )
+    ctx.obj["no_clone"] = no_clone
+    if not no_clone:
+        click.echo("Клонирование ядра и addons…")
+        sync_project_sources(ProjectFiles(project_dir), log=click.echo)
+
+    if no_up or ctx.obj.get("skip_start"):
+        click.echo("Дальше из этого каталога: kodpm -d odoo up")
+        return
+    if click.get_text_stream("stdin").isatty() and not overwrite:
+        if not click.confirm("Запустить установку (кластер + helm up)?", default=True):
+            click.echo("Дальше из этого каталога: kodpm -d odoo up")
+            return
+
+    if ctx.obj["profile"] == "local":
+        require_k3d()
+        click.echo("Проверка / создание k3d-кластера…")
+        init_cluster()
+    perform_up(ctx, wait=True)
+    if ctx.obj.get("do_install") or parse_modules(settings.get("init_modules")):
+        ctx.obj["db_name"] = ctx.obj.get("db_name") or "odoo"
+        _run_modules(ctx, "install", None)
+
+
 @cli.command("init")
 @_PROFILE_OPTION
 @click.option("--odoo-version", default=None, help="Odoo/fork series, e.g. 17.0")
 @click.option("--platform", default=None, help="Core name: odoo, fincomtech, …")
 @click.option("--addon", "addons", multiple=True, help="Addon git URL, optionally 'URL branch'. Repeatable.")
-@click.option("--addons-branch", default=None, help="Git branch for addons (written to kodpm.json)")
+@click.option("--addons-branch", default=None, help="Git branch for addons / developing repo")
 @click.option("--modules", default=None, help="Modules to install, comma-separated")
 @click.option("--image", default=None, help="Container image for a fork (registry/name:tag)")
 @click.option("--odoo-git-link", default=None, help="Git of the platform fork")
 @click.option("--db-lang", default=None, help="Database language, e.g. ru_RU")
 @click.option("--admin-password", default=None, help="Admin / DB manager password")
 @click.option("--no-up", is_flag=True, help="Only write project files, do not helm up")
+@click.option("--skip-start", is_flag=True, help="Same as --no-up")
 @click.option("--no-clone", is_flag=True, help="Do not clone core/addons into kodpm_data")
 @click.option("--yes", "overwrite", is_flag=True, help="Overwrite existing files without asking")
 @click.pass_context
@@ -205,132 +496,27 @@ def init_project(
     db_lang: str | None,
     admin_password: str | None,
     no_up: bool,
+    skip_start: bool,
     no_clone: bool,
     overwrite: bool,
 ) -> None:
-    """Create the project layout (json, conf, values.local.yaml, source links), then install."""
+    """Create the project layout (odpm.json, conf, values.local.yaml, source links)."""
     _apply_profile(ctx, profile)
-    project_dir = Path(ctx.obj["project_dir"])
-    versions = ", ".join(known_versions())
-    platforms = ", ".join(p for p in known_platforms() if p != "custom")
-
-    click.echo(f"Проект kodpm: {project_dir}")
-    while True:
-        if odoo_version is None:
-            odoo_version = click.prompt(f"Версия ядра ({versions})", default="17.0")
-        try:
-            odoo_version = resolve_odoo_version(odoo_version)
-            break
-        except KeyError as exc:
-            click.echo(str(exc))
-            odoo_version = None
-
-    if platform is None:
-        platform = click.prompt(f"Наименование ядра ({platforms})", default="odoo")
-    platform = normalize_platform(platform)
-
-    image_val = image or ""
-    git_val = odoo_git_link or ""
-    if platform != "odoo":
-        if image is None:
-            image_val = click.prompt(
-                "Образ ядра (registry/name:tag, пусто — пропустить)",
-                default="",
-                show_default=False,
-            )
-        if odoo_git_link is None:
-            git_val = click.prompt(
-                "Git-репозиторий ядра (пусто — пропустить)",
-                default="",
-                show_default=False,
-            )
-
-    addon_links = list(addons)
-    if not addon_links:
-        click.echo("Репозитории addons. Формат: URL (ветка спрашивается отдельно).")
-        click.echo("Можно сразу: git@github.com:org/addons.git 17.0")
-        click.echo("Нажмите Enter (или введите «готово») — закончить список.")
-        while True:
-            line = click.prompt("  addons git", default="готово", show_default=True)
-            text = str(line).strip()
-            if text.lower() in DONE_TOKENS:
-                break
-            addon_links.append(text)
-            click.echo(f"    добавлен {text}")
-    if addons_branch is None:
-        addons_branch = click.prompt("Ветка addons", default=odoo_version)
-    addons_branch = str(addons_branch).strip() or odoo_version
-    addon_links = normalize_addon_links(addon_links, addons_branch)
-    if addon_links:
-        click.echo("Итого addons: " + "; ".join(addon_links))
-    elif not addons:
-        click.echo("Addons не указаны, иду дальше.")
-
-    if modules is None:
-        modules = click.prompt("Модули для установки (-i)", default="base,web")
-    if db_lang is None:
-        db_lang = click.prompt("Язык базы", default="ru_RU")
-    if admin_password is None:
-        admin_password = click.prompt("Пароль admin / менеджера БД", default="admin")
-
-    kodpm_path = project_dir / PROJECT_JSON_NAME
-    settings_path = project_dir / "user_settings.json"
-    existing = [
-        path
-        for path in (kodpm_path, project_dir / LEGACY_PROJECT_JSON_NAME, settings_path)
-        if path.exists()
-    ]
-    if existing and not overwrite:
-        if not click.confirm("Файлы проекта уже есть. Перезаписать?", default=False):
-            raise click.Abort()
-
-    odpm = build_kodpm_json(
-        odoo_version,
-        platform,
-        addon_links,
-        image=image_val,
-        odoo_git_link=git_val,
-        addons_branch=addons_branch,
+    run_init(
+        ctx,
+        addons=addons,
+        addons_branch=addons_branch or ctx.obj.get("init_branch"),
+        odoo_version=odoo_version,
+        platform=platform,
+        modules=modules,
+        image=image,
+        odoo_git_link=odoo_git_link,
+        db_lang=db_lang,
+        admin_password=admin_password,
+        no_up=no_up or skip_start or bool(ctx.obj.get("skip_start")),
+        no_clone=no_clone,
+        overwrite=overwrite,
     )
-    settings = build_user_settings(
-        modules or "base,web",
-        db_lang=db_lang or "ru_RU",
-        db_country_code="ru" if str(db_lang or "").startswith("ru") else False,
-        admin_password=admin_password or "admin",
-        dev_mode="reload,xml" if ctx.obj["profile"] == "local" else "",
-    )
-    write_project_files(project_dir, odpm, settings)
-    project = ProjectFiles(project_dir)
-    _sync_layout(ctx, overwrite_conf=overwrite)
-    written = [
-        kodpm_path.name,
-        settings_path.name,
-        project.requirements_path.name,
-        project.conf_name,
-        project.values_local_path.name,
-    ]
-    click.echo("Записано: " + ", ".join(written))
-    ctx.obj["no_clone"] = no_clone
-    if not no_clone:
-        click.echo("Клонирование ядра и addons…")
-        sync_project_sources(ProjectFiles(project_dir), log=click.echo)
-
-    if no_up:
-        click.echo("Дальше из этого каталога: kodpm up")
-        return
-    if click.get_text_stream("stdin").isatty() and not overwrite:
-        if not click.confirm("Запустить установку (кластер + helm up)?", default=True):
-            click.echo("Дальше из этого каталога: kodpm up")
-            return
-
-    if ctx.obj["profile"] == "local":
-        require_k3d()
-        click.echo("Проверка / создание k3d-кластера…")
-        init_cluster()
-    perform_up(ctx, wait=True)
-    if parse_modules(settings.get("init_modules")):
-        ctx.obj["db_name"] = ctx.obj.get("db_name") or "odoo"
-        _run_modules(ctx, "install", None)
 
 
 @cli.command()
@@ -338,12 +524,28 @@ def init_project(
 @click.option("--dry-run", is_flag=True, help="Print Helm template, do not install")
 @click.option("--wait/--no-wait", default=True, show_default=True)
 @click.option("--no-clone", is_flag=True, help="Do not clone core/addons into kodpm_data")
+@click.option("-i", "do_install", is_flag=True, help="After up, install init_modules")
+@click.option("-u", "do_update", is_flag=True, help="After up, update update_modules")
 @click.pass_context
-def up(ctx: click.Context, dry_run: bool, wait: bool, profile: str | None, no_clone: bool) -> None:
+def up(
+    ctx: click.Context,
+    dry_run: bool,
+    wait: bool,
+    profile: str | None,
+    no_clone: bool,
+    do_install: bool,
+    do_update: bool,
+) -> None:
     """Install or upgrade the instance (Helm). Run from the project directory."""
     _apply_profile(ctx, profile)
     ctx.obj["no_clone"] = no_clone
     perform_up(ctx, dry_run=dry_run, wait=wait)
+    if dry_run:
+        return
+    if do_install or ctx.obj.get("do_install"):
+        _run_modules(ctx, "install", None)
+    if do_update or ctx.obj.get("do_update"):
+        _run_modules(ctx, "update", None)
 
 
 @cli.command()
@@ -626,7 +828,7 @@ def exec_cmd(ctx: click.Context) -> None:
 @_PROFILE_OPTION
 @click.pass_context
 def show_values(ctx: click.Context, profile: str | None) -> None:
-    """Print merged Helm values (profile + catalogs + kodpm.json)."""
+    """Print merged Helm values (profile + catalogs + odpm.json / kodpm.json)."""
     _apply_profile(ctx, profile)
     click.echo(yaml.safe_dump(_values(ctx), sort_keys=False, allow_unicode=True))
 

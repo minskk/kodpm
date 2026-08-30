@@ -7,6 +7,7 @@ from typing import Any
 
 PROJECT_JSON_NAME = "kodpm.json"
 LEGACY_PROJECT_JSON_NAME = "odpm.json"
+ODPM_JSON_NAME = "odpm.json"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -68,22 +69,29 @@ def parse_dependencies(raw: Any, default_branch: str | None = None) -> list[dict
     return repos
 
 
+def has_project_manifest(project_dir: Path) -> bool:
+    root = project_dir.resolve()
+    odpm = root / ODPM_JSON_NAME
+    kodpm = root / PROJECT_JSON_NAME
+    return odpm.is_file() or odpm.is_symlink() or kodpm.is_file()
+
+
 class ProjectFiles:
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = project_dir.resolve()
-        self.odpm = load_json(self.project_dir / PROJECT_JSON_NAME)
+        self.odpm = load_json(self.project_dir / ODPM_JSON_NAME)
         if not self.odpm:
-            self.odpm = load_json(self.project_dir / LEGACY_PROJECT_JSON_NAME)
+            self.odpm = load_json(self.project_dir / PROJECT_JSON_NAME)
         self.user_settings = load_json(self.project_dir / "user_settings.json")
         if not self.user_settings:
             self.user_settings = load_json(self.project_dir / "usersettings.json")
 
     @property
     def project_json_path(self) -> Path:
-        kodpm_path = self.project_dir / PROJECT_JSON_NAME
-        if kodpm_path.is_file() or not (self.project_dir / LEGACY_PROJECT_JSON_NAME).is_file():
-            return kodpm_path
-        return self.project_dir / LEGACY_PROJECT_JSON_NAME
+        odpm_path = self.project_dir / ODPM_JSON_NAME
+        if odpm_path.is_file() or odpm_path.is_symlink():
+            return odpm_path
+        return self.project_dir / PROJECT_JSON_NAME
 
     @property
     def name(self) -> str:
@@ -99,7 +107,17 @@ class ProjectFiles:
 
     @property
     def odoo_git_link(self) -> str:
-        return str(self.odpm.get("odoo_git_link") or "")
+        platform = self.odpm.get("platform")
+        if isinstance(platform, dict) and platform.get("git"):
+            return str(platform["git"]).strip()
+        return str(self.odpm.get("odoo_git_link") or "").strip()
+
+    @property
+    def postgres_version(self) -> str:
+        raw = self.odpm.get("postgres")
+        if isinstance(raw, dict):
+            return str(raw.get("version") or raw.get("image") or "").strip()
+        return str(raw or "").strip()
 
     @property
     def conf_name(self) -> str:
@@ -127,11 +145,48 @@ class ProjectFiles:
 
     @property
     def addons_branch(self) -> str:
+        """Branch of the developing repo (`--branch`). Dependencies use `odoo_version`."""
+        from_settings = str(self.user_settings.get("addons_branch") or "").strip()
+        if from_settings:
+            return from_settings
         return str(self.odpm.get("addons_branch") or "").strip() or self.odoo_version
 
     def addon_repos(self) -> list[dict[str, Any]]:
-        """Repos declared in the project kodpm.json only (not addon odpm.json)."""
-        return parse_dependencies(self.odpm.get("dependencies"), default_branch=self.addons_branch)
+        """Developing repo plus `dependencies` from the project odpm.json / kodpm.json."""
+        repos: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        developing = self.odpm.get("developing")
+        if isinstance(developing, dict):
+            url = str(developing.get("git") or developing.get("url") or "").strip()
+            if url:
+                parsed = parse_git_link(url, default_branch=self.addons_branch)
+                parsed["branch"] = str(developing.get("branch") or parsed["branch"])
+                repos.append(parsed)
+                seen.add(parsed["name"])
+        elif isinstance(developing, str) and developing.strip():
+            parsed = parse_git_link(developing, default_branch=self.addons_branch)
+            repos.append(parsed)
+            seen.add(parsed["name"])
+        for repo in parse_dependencies(self.odpm.get("dependencies"), default_branch=self.odoo_version):
+            name = str(repo["name"])
+            if name in seen:
+                continue
+            seen.add(name)
+            repos.append(repo)
+        return repos
+
+    def chosen_scenario(self) -> dict[str, Any]:
+        scenarios = self.odpm.get("scenarios")
+        if not isinstance(scenarios, dict):
+            return {}
+        for key in ("developer", "local", "dev"):
+            item = scenarios.get(key)
+            if isinstance(item, dict):
+                return item
+        for item in scenarios.values():
+            if isinstance(item, dict):
+                return item
+        return {}
 
     def init_modules(self) -> list[str]:
         return parse_modules(self.user_settings.get("init_modules"))
@@ -160,7 +215,12 @@ class ProjectFiles:
 
     def db_lang(self) -> str:
         data = self.user_settings.get("db_creation_data") or {}
-        return str(data.get("db_lang") or "en_US")
+        if data.get("db_lang"):
+            return str(data["db_lang"])
+        database = self.odpm.get("database")
+        if isinstance(database, dict) and database.get("language"):
+            return str(database["language"])
+        return "en_US"
 
     def dev_mode(self) -> str:
         value = self.user_settings.get("dev_mode")

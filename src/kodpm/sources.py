@@ -26,16 +26,17 @@ def relative_symlink_target(link: Path, target: Path) -> Path:
     return Path(os.path.relpath(target.resolve(), start=link.parent.resolve()))
 
 
-def ensure_symlink(link: Path, target: Path) -> None:
+def ensure_symlink(link: Path, target: Path, *, directory: bool = True) -> None:
     target = target.resolve()
     dest = relative_symlink_target(link, target)
     if link.is_symlink():
-        if Path(os.path.normpath(link.parent / link.readlink())) == target or link.resolve() == target:
+        current = Path(os.path.normpath(link.parent / link.readlink()))
+        if current == target or (link.exists() and link.resolve() == target):
             return
         link.unlink()
     elif link.exists():
         raise ToolError(f"{link} already exists and is not a symlink")
-    link.symlink_to(dest, target_is_directory=True)
+    link.symlink_to(dest, target_is_directory=directory)
 
 
 def ensure_readable_tree(path: Path) -> None:
@@ -177,5 +178,31 @@ def sync_project_sources(project: ProjectFiles, *, log=print) -> list[str]:
             cloned.add(name)
             linked.append(name)
             log(f"Ссылка: {project.project_dir / name} → {dest}")
+
+    from kodpm.extraservices import service_source_repos
+
+    for repo in service_source_repos(project):
+        name = str(repo["name"])
+        if name in cloned:
+            continue
+        url = str(repo["url"])
+        branch = str(repo.get("branch") or project.odoo_version)
+        dest = data / cache_dirname(name, branch)
+        log(f"Service source: {url} ({branch}) → {dest}")
+        clone_or_update(url, dest, branch)
+        ensure_readable_tree(dest)
+        ensure_symlink(project.project_dir / name, dest)
+        cloned.add(name)
+        linked.append(name)
+        log(f"Ссылка: {project.project_dir / name} → {dest}")
+
+    developing = next(iter(project.addon_repos()), None)
+    if developing:
+        name = str(developing["name"])
+        odpm_file = project.project_dir / name / "odpm.json"
+        link = project.project_dir / "odpm.json"
+        if odpm_file.is_file() and not link.exists() and not link.is_symlink():
+            ensure_symlink(link, odpm_file, directory=False)
+            log(f"Ссылка: {link} → {odpm_file}")
 
     return linked

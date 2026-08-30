@@ -1,0 +1,85 @@
+{{- range .Values.extraServices }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoo-instance.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "odoo-instance.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: extra-{{ .name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "odoo-instance.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: extra-{{ .name }}
+  template:
+    metadata:
+      labels:
+        {{- include "odoo-instance.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: extra-{{ .name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: {{ .image | quote }}
+          imagePullPolicy: IfNotPresent
+          {{- if .command }}
+          command:
+            {{- toYaml .command | nindent 12 }}
+          {{- end }}
+          {{- if .env }}
+          env:
+            {{- range $key, $value := .env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if .ports }}
+          ports:
+            {{- range .ports }}
+            - name: {{ .name }}
+              containerPort: {{ .containerPort }}
+            {{- end }}
+          {{- end }}
+          {{- if .volumes }}
+          volumeMounts:
+            {{- range .volumes }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath | quote }}
+            {{- end }}
+          {{- end }}
+      {{- if .volumes }}
+      volumes:
+        {{- range .volumes }}
+        - name: {{ .name }}
+          hostPath:
+            path: {{ .hostPath | quote }}
+            type: DirectoryOrCreate
+        {{- end }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odoo-instance.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "odoo-instance.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: extra-{{ .name }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "odoo-instance.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: extra-{{ .name }}
+  ports:
+    {{- if .ports }}
+    {{- range .ports }}
+    - name: {{ .name }}
+      port: {{ .containerPort }}
+      targetPort: {{ .containerPort }}
+    {{- end }}
+    {{- else }}
+    - name: http
+      port: 80
+      targetPort: 80
+    {{- end }}
+{{- end }}

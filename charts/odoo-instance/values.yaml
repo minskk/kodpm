@@ -148,3 +148,5 @@ pythonRequirements:
   enabled: false
   project: ""
   odoo: ""
+
+extraServices: []

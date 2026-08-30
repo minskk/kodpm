@@ -263,7 +263,7 @@ def build_values(
         },
         "postgres": {
             "enabled": True,
-            "image": f"postgres:{version.postgres}",
+            "image": f"postgres:{project.postgres_version or version.postgres}",
             "user": "odoo",
             "database": "postgres",
             "password": "odoo",
@@ -303,6 +303,7 @@ def build_values(
         },
         "pythonRequirements": python_requirements_values(project),
         "odpmSecrets": {"enabled": False, "hostPath": ""},
+        "extraServices": [],
     }
 
     if profile == "local":
@@ -324,6 +325,10 @@ def build_values(
         mapped = host_home_path(runtime) if runtime.is_file() else None
         if mapped:
             values["odpmSecrets"] = {"enabled": True, "hostPath": mapped}
+
+    from kodpm.extraservices import extra_service_values
+
+    values["extraServices"] = extra_service_values(project)
 
     merged = deep_merge(values, profile_values)
     namespace = merged.pop("namespace", None)

@@ -173,34 +173,36 @@ kubectl get nodes
 Нужен SSH-доступ к GitHub (`git@github.com:…`): ключ в `ssh-agent` или `~/.ssh`.
 
 ```bash
-mkdir -p /home/user/projects/kodpm_odoo_test
-cd /home/user/projects/kodpm_odoo_test
+mkdir -p /home/user/projects/fincom_extra
+cd /home/user/projects/fincom_extra
 source /home/user/projects/kodpm/.venv/bin/activate
-kodpm init
+kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev --skip-start
+kodpm -d odoo up
 ```
 
-Мастер спросит:
+`--init URL` клонирует разрабатываемый репозиторий. Если в клоне есть `odpm.json`, визард не запускается: в корне появляется симлинк `odpm.json` → `<имя>/odpm.json`. Без URL (`kodpm --init` или `kodpm init`) мастер спросит:
 
-- версию ядра (10.0–19.0);
+- git-репозитории (первый — developing, остальные — `dependencies` строками);
+- ветку (`--branch` или один общий вопрос);
+- версию ядра (10.0–19.0), если манифеста нет;
 - наименование ядра (`odoo`, `fincomtech`, …);
-- git-репозитории addons (URL; ветку можно дописать в той же строке);
-- ветку addons (по умолчанию серия Odoo, пишется в `kodpm.json` как `addons_branch`);
 - модули для `-i`, язык БД, пароль.
 
 Затем:
 
-1. Пишутся `kodpm.json`, `user_settings.json`, пустой `requirements.txt` (пакеты Python для проекта), `odoo.conf` (или `{platform}.conf`) и `values.local.yaml`.
-2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `git@github.com:odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
-3. Каждый репозиторий addons клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
-4. Поднимаются кластер k3d (если ещё нет), Helm и модули.
+1. Пишется ODPM v2 `odpm.json` (в клон developing + симлинк в корне) либо используется уже существующий манифест. `user_settings.json`, пустой `requirements.txt`, `odoo.conf` (или `{platform}.conf`) и `values.local.yaml` дописываются, если их нет. Старые проекты с `kodpm.json` по-прежнему читаются.
+2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `https://github.com/odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
+3. Каждый репозиторий addons и `service_sources` клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
+4. Без `--skip-start` поднимаются кластер k3d (если ещё нет) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; порты на хосте — через `kubectl port-forward`.
 
 `odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). В него же попадают `scenarios.developer.odoo_conf.options` из `odpm.json` addons, если ключа ещё нет (например `server_wide_modules`). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Пакеты Python ставятся из `odpm.json` addons (`scenarios.developer.requirements`); файлы `requirements.txt` не читаются.
 
 Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
 
-Только файлы, без клона и установки:
+Только файлы, без Helm:
 
 ```bash
+kodpm --init --skip-start
 kodpm init --no-up --no-clone
 ```
 

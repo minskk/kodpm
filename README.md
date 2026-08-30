@@ -1,6 +1,6 @@
 # kodpm
 
-Kubernetes environment for **Odoo Community 10–19** and rebranded forks (for example Fincomtech). Same idea as [ODPM](https://github.com/aayartsev/odpm): one project description (`kodpm.json` + `user_settings.json`), CLI for dumps and module install/update. Runtime is Helm on Kubernetes instead of Docker Compose.
+Kubernetes environment for **Odoo Community 10–19** and rebranded forks (for example Fincomtech). Same idea as [ODPM](https://github.com/aayartsev/odpm): one project description (`odpm.json` + `user_settings.json`; existing projects may still use `kodpm.json`), CLI for dumps and module install/update. Runtime is Helm on Kubernetes instead of Docker Compose.
 
 Profiles: **local** (k3d), **test**, **dev**.
 
@@ -30,15 +30,23 @@ If you install the wheel elsewhere, set `KODPM_HOME` to the clone path so CLI ca
 kodpm uses the **current directory** as the project. You do not need `--project-dir`.
 
 ```bash
-mkdir ~/projects/kodpm_odoo_test && cd ~/projects/kodpm_odoo_test
+mkdir ~/projects/fincom_extra && cd ~/projects/fincom_extra
 source ~/projects/kodpm/.venv/bin/activate
-kodpm init
+kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev
+kodpm -d odoo up       # start the stack
+kodpm -d odoo modules install
 ```
 
-The wizard asks for Odoo version, core name (`odoo` / `fincomtech`), addon git repos and the **addons branch**, writes `kodpm.json` (including `addons_branch` and each dependency `branch`), `user_settings.json`, an empty `requirements.txt`, `odoo.conf` and `values.local.yaml`, **clones the core and addons into `~/projects/kodpm_data`** (symlinks in the project root), then installs. Each addon clone's `odpm.json` also supplies nested git `dependencies`, `scenarios.developer.requirements` (pip; not `requirements.txt`), and `scenarios.developer.odoo_conf.options` (e.g. `server_wide_modules`). Module API keys go in `.kodpm/secrets.json` (or `.odpm/secrets.json`); kodpm writes `*/data/secret.xml` and mounts `/run/odpm/secrets.json`.
+`--init URL` clones the developing repo into `~/projects/kodpm_data`, symlinks it into the project root, and if that clone already has `odpm.json`, **skips the wizard**. The workspace root gets a symlink `odpm.json` → `<name>/odpm.json`. `user_settings.json` and `values.local.yaml` are created if missing.
+
+Bare `--init` (or `kodpm init`) starts the wizard. The first git URL is **developing**; the rest become `"dependencies": ["https://…"]` strings in ODPM v2 `odpm.json`. If the clone has no manifest, the wizard writes v2 into `<name>/odpm.json` and creates the same symlink.
+
+`--skip-start` writes files and clones sources without Helm. Subcommands stay as synonyms: `kodpm init`, `kodpm up`, `kodpm modules install|update`.
+
+Addon `odpm.json` also supplies nested git `dependencies`, `scenarios.developer.requirements` (pip; not `requirements.txt`), `scenarios.developer.odoo_conf.options` (e.g. `server_wide_modules`), and `scenarios.developer.services` (extra Deployments/Services in the same Helm release; `${@service:odoo}` / `${@source:NAME}` are interpolated). Module API keys go in `.kodpm/secrets.json` (or `.odpm/secrets.json`); kodpm writes `*/data/secret.xml` and mounts `/run/odpm/secrets.json`. Existing projects that still have `kodpm.json` keep working.
 
 ```bash
-kodpm up
+kodpm -d odoo up
 kodpm status
 kodpm -d odoo modules update
 kodpm -d odoo db backup --name demo
@@ -56,7 +64,11 @@ kodpm up --dry-run
 ## CLI
 
 ```
-kodpm init                  # wizard: version, core, addons → files + install
+kodpm --init [URL] [--branch X] [--skip-start]
+kodpm -d NAME up            # helm up (required; -d alone is not enough)
+kodpm -d NAME up -i         # up, then install init_modules
+kodpm -d NAME modules install | update
+kodpm init                  # wizard synonym
 kodpm cluster init | delete
 kodpm up [--profile local|test|dev] [--dry-run]
 kodpm down
@@ -70,7 +82,7 @@ kodpm modules update [names]
 kodpm exec -- [odoo args...]
 ```
 
-Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`.
+Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`.
 
 Module jobs run **`--stop-after-init` in a Kubernetes Job**, not on the running Deployment (so liveness probes cannot kill a long `-u`).
 
