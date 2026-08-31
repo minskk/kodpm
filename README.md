@@ -4,14 +4,14 @@ Kubernetes environment for **Odoo Community 10–19** and rebranded forks (for e
 
 Profiles: **local** (k3d), **test**, **dev**.
 
+Русская версия: [README_RU.md](README_RU.md). Пошаговая установка пакетов: **[INSTALL.md](INSTALL.md)**.
+
 ## Requirements
 
 - Python 3.11+
 - Helm 3, kubectl
 - Local profile: [k3d](https://k3d.io/) and Docker
 - Project directory under `$HOME` for live addons on local (k3d mounts `$HOME` at `/host-home`)
-
-Step-by-step when packages are missing (Ubuntu/Debian): **[INSTALL.md](INSTALL.md)**.
 
 ## Install
 
@@ -32,31 +32,30 @@ kodpm uses the **current directory** as the project. You do not need `--project-
 ```bash
 mkdir ~/projects/fincom_extra && cd ~/projects/fincom_extra
 source ~/projects/kodpm/.venv/bin/activate
-kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev
-kodpm -d odoo up       # start the stack
+
+kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev --skip-start
+# asks for init_modules (default base,web) → user_settings.json
+
+kodpm cluster init          # first time only; later `up` starts a stopped cluster
+kodpm -d odoo up
 kodpm -d odoo modules install
 ```
 
-`--init URL` clones the developing repo into `~/projects/kodpm_data`, symlinks it into the project root, and if that clone already has `odpm.json`, **skips the wizard**. The workspace root gets a symlink `odpm.json` → `<name>/odpm.json`. `user_settings.json` and `values.local.yaml` are created if missing.
+`--init URL` clones the developing repo into `~/projects/kodpm_data`, symlinks it into the project root, and if that clone already has `odpm.json`, **skips the version/platform wizard**. It still asks for **init_modules**. The workspace root gets a symlink `odpm.json` → `<name>/odpm.json`. `user_settings.json` and `values.local.yaml` are created if missing.
 
-Bare `--init` (or `kodpm init`) starts the wizard. The first git URL is **developing**; the rest become `"dependencies": ["https://…"]` strings in ODPM v2 `odpm.json`. If the clone has no manifest, the wizard writes v2 into `<name>/odpm.json` and creates the same symlink.
+Without `--skip-start`, `--init` can create/start the cluster and run Helm (it will ask). Modules are still a separate step (`modules install` or `up -i`).
 
-`--skip-start` writes files and clones sources without Helm. Subcommands stay as synonyms: `kodpm init`, `kodpm up`, `kodpm modules install|update`.
+Bare `--init` (or `kodpm init`) starts the full wizard. The first git URL is **developing**; the rest become `"dependencies"` in ODPM v2 `odpm.json`.
 
-Addon `odpm.json` also supplies nested git `dependencies`, `scenarios.developer.requirements` (pip; not `requirements.txt`), `scenarios.developer.odoo_conf.options` (e.g. `server_wide_modules`), and `scenarios.developer.services` (extra Deployments/Services in the same Helm release; `${@service:odoo}` / `${@source:NAME}` are interpolated). Module API keys go in `.kodpm/secrets.json` (or `.odpm/secrets.json`); kodpm writes `*/data/secret.xml` and mounts `/run/odpm/secrets.json`. Existing projects that still have `kodpm.json` keep working.
+`kodpm -d odoo up` does **not** create a cluster. It starts a stopped one. After `up` it prints the UI URL and, if extras are defined, port-forwards on `127.0.0.1` plus `Дальше: kodpm -d odoo modules install`.
 
-```bash
-kodpm -d odoo up
-kodpm status
-kodpm -d odoo modules update
-kodpm -d odoo db backup --name demo
-```
+Addon `odpm.json` also supplies nested git `dependencies`, `scenarios.developer.requirements` (pip; not `requirements.txt`), `scenarios.developer.odoo_conf.options` (e.g. `server_wide_modules`), and `scenarios.developer.services` (extra Deployments/Services; `${@service:odoo}` / `${@source:NAME}`). API keys go in `.kodpm/secrets.json`; kodpm writes `*/data/secret.xml` and mounts `/run/odpm/secrets.json`. Existing `kodpm.json` projects keep working.
 
-On the local profile MinIO stores dumps in `{project}/odoo_backups` (hostPath). Archives are under `odoo_backups/kodpm-dumps/`. Pip extras from `odpm.json` are installed on the host (Docker + the Odoo image, host DNS) into `{project}/.kodpm/pip-packages` and mounted into the pod.
+On local, MinIO dumps go to `{project}/odoo_backups` (`kodpm-dumps/` inside). Pip extras install on the host (Docker + Odoo image) into `{project}/.kodpm/pip-packages`. `up` pulls images on the host and imports them into k3d (`ctr`). A local-only tag such as `autoparts_env:emulator` must already exist in Docker.
 
-UI: `http://<project-dir-name>.127.0.0.1.nip.io` (for example `http://kodpm-odoo-test.127.0.0.1.nip.io`) — DB manager password comes from `user_settings.json`.
+UI: `http://<project-dir-name>.127.0.0.1.nip.io` — DB manager password from `user_settings.json`.
 
-`--project-dir` is only for calling kodpm while standing in another directory. Existing demo:
+`--project-dir` is only for calling kodpm from another directory. Existing demo:
 
 ```bash
 cd /path/to/kodpm/examples/demo-17
@@ -67,15 +66,14 @@ kodpm up --dry-run
 
 ```
 kodpm --init [URL] [--branch X] [--skip-start]
-kodpm -d NAME up            # helm up (required; -d alone is not enough)
+kodpm cluster init | start | delete
+kodpm -d NAME up              # helm up (-d alone is not enough)
 kodpm -d NAME up --no-extras  # without odpm.json extra services
-# local up also docker pull + ctr-import into k3d (core and extra images)
-kodpm -d NAME up -i         # up, then install init_modules
+kodpm -d NAME up -i           # up, then install init_modules
 kodpm -d NAME modules install | update
-kodpm init                  # wizard synonym
-kodpm cluster init | delete
+kodpm init                    # wizard synonym
 kodpm up [--profile local|test|dev] [--dry-run]
-kodpm down
+kodpm down                    # helm uninstall; extra port-forwards stop
 kodpm status
 kodpm values
 kodpm config get [KEY]
@@ -88,7 +86,7 @@ kodpm exec -- [odoo args...]
 
 Optional global flags: `--project-dir` (default: `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`, `--no-extras`.
 
-Module jobs run **`--stop-after-init` in a Kubernetes Job**, not on the running Deployment (so liveness probes cannot kill a long `-u`).
+Module jobs run **`--stop-after-init` in a Kubernetes Job**, not on the running Deployment. After install/update kodpm prints the UI URL again.
 
 ## Layout
 
@@ -103,6 +101,7 @@ docs/
 
 ## Docs
 
+- [Install (Debian/Ubuntu)](INSTALL.md)
 - [ODPM field mapping](docs/odpm-mapping.md)
 - [Profiles](docs/profiles.md)
 - [Forks](docs/forks.md)

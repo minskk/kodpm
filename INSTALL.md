@@ -218,7 +218,9 @@ mkdir -p /home/user/projects/fincom_extra
 cd /home/user/projects/fincom_extra
 source /home/user/projects/kodpm/.venv/bin/activate
 kodpm --init git@gitverse.ru:fincomtech/extra_module.git --branch 17.0-dev --skip-start
+kodpm cluster init
 kodpm -d odoo up
+kodpm -d odoo modules install
 ```
 
 `--init URL` клонирует разрабатываемый репозиторий. Если в клоне есть `odpm.json`, визард не запускается: в корне появляется симлинк `odpm.json` → `<имя>/odpm.json`. В обоих случаях спрашиваются модули для инициализации (`init_modules` в `user_settings.json`, по умолчанию `base,web`). Без URL (`kodpm --init` или `kodpm init`) мастер ещё спросит:
@@ -234,7 +236,7 @@ kodpm -d odoo up
 1. Пишется ODPM v2 `odpm.json` (в клон developing + симлинк в корне) либо используется уже существующий манифест. `user_settings.json`, пустой `requirements.txt`, `odoo.conf` (или `{platform}.conf`) и `values.local.yaml` дописываются, если их нет. Старые проекты с `kodpm.json` по-прежнему читаются.
 2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `https://github.com/odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
 3. Каждый репозиторий addons и `service_sources` клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
-4. Без `--skip-start` поднимаются кластер k3d (если ещё нет) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; после `up` kodpm поднимает `kubectl port-forward` на `127.0.0.1` (останавливает `kodpm down`).
+4. Без `--skip-start` поднимаются кластер k3d (если ещё нет или нода остановлена) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; после `up` kodpm ждёт их Ready (до 300 с) и поднимает `kubectl port-forward` на `127.0.0.1` (останавливает `kodpm down`). В конце `up` печатает URL и подсказку `kodpm -d odoo modules install`.
 
 `odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). В него же попадают `scenarios.developer.odoo_conf.options` из `odpm.json` addons, если ключа ещё нет (например `server_wide_modules`). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Пакеты Python ставятся из `odpm.json` addons (`scenarios.developer.requirements`); файлы `requirements.txt` не читаются.
 
@@ -247,6 +249,6 @@ kodpm --init --skip-start
 kodpm init --no-up --no-clone
 ```
 
-UI (имя из каталога проекта): <http://kodpm-odoo-test.127.0.0.1.nip.io>
+UI (имя из каталога проекта): <http://fincom-extra.127.0.0.1.nip.io>
 
 Дальше: [README_RU.md](README_RU.md), [docs/odpm-mapping.md](docs/odpm-mapping.md).
