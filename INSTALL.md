@@ -1,64 +1,66 @@
-# Установка kodpm и зависимостей
+# Installing KODPM and dependencies
 
-Пошаговая установка на Debian/Ubuntu, когда пакетов нет в обычном `apt` (так бывает с `kubectl` и `helm`). После этого — проверка всего набора и первый `kodpm cluster init`.
+Step-by-step setup on Debian/Ubuntu when packages are missing from a normal `apt` (typical for `kubectl` and `helm`). After that: verify the toolchain and run the first `kodpm cluster init`.
 
-Каталог клона kodpm в примерах: `/home/user/projects/kodpm`. Подставьте свой путь.
+Example KODPM clone path: `/home/user/projects/kodpm`. Substitute your own.
 
-Архитектура CPU:
+CPU architecture:
 
 ```bash
 uname -m
 ```
 
-- `x86_64` → в URL бинарников используйте `amd64`
+- `x86_64` → use `amd64` in binary URLs
 - `aarch64` → `arm64`
+
+Russian version: [INSTALL_RU.md](INSTALL_RU.md).
 
 ---
 
-## Шпаргалка: запуск проекта с нуля
+## Cheat sheet: empty project to running stack
 
-Инструменты (Docker, k3d, kubectl, Helm) и venv kodpm — разделы 1–7 ниже. Дальше — из **пустой папки внутри `$HOME`**.
+Install Docker, k3d, kubectl, Helm, and the KODPM venv (sections 1–7). Then work from an **empty directory under `$HOME`**.
 
 ```bash
 mkdir -p ~/projects/myapp && cd ~/projects/myapp
 source ~/projects/kodpm/.venv/bin/activate
 
-# файлы + клон developing (визард не нужен, если в репо уже есть odpm.json)
-# спросит init_modules (по умолчанию base,web) → user_settings.json
+# files + clone of the developing repo (no version wizard if odpm.json is already in the repo)
+# asks for init_modules (default base,web) → user_settings.json
 kodpm --init git@github.com:org/repo.git --branch 17.0-dev --skip-start
 
-# если в odpm.json есть scenarios.developer.secrets
+# if odpm.json has scenarios.developer.secrets
 cp .kodpm/secrets.example.json .kodpm/secrets.json
-# заполнить ключи
+# fill in the keys
 
-# up сам кластер не создаёт
+# `up` does not create the cluster
 kodpm cluster init
 
-# клоны addons, pip на хосте, образы → k3d, Helm, port-forward extra
+# addon clones, host pip, images → k3d, Helm, extra port-forwards
 kodpm -d odoo up
 
-# модули (Job, не в бегущем поде)
+# modules (Kubernetes Job, not the running Odoo pod)
 kodpm -d odoo modules install
 ```
 
-Без `--skip-start` `--init` сам спросит про установку и вызовет `cluster init` + `up`. Модули тогда отдельно или сразу `-i`:
+Without `--skip-start`, `--init` asks whether to install and then runs `cluster init` + `up`. Modules are still a separate step, or use `-i`:
 
 ```bash
 kodpm --init git@github.com:org/repo.git --branch 17.0-dev
-# подтвердить установку
+# confirm install
 kodpm -d odoo modules install
-# или: kodpm -d odoo up -i
+# or: kodpm -d odoo up -i
 ```
 
-UI: `http://<имя-папки>.127.0.0.1.nip.io` (каталог `kodpm_autoparts` → <http://kodpm-autoparts.127.0.0.1.nip.io>).
+UI: `http://<directory-name>.127.0.0.1.nip.io` (folder `kodpm_autoparts` → <http://kodpm-autoparts.127.0.0.1.nip.io>).
 
-`up` сам: клоны в `~/projects/kodpm_data`, pip в `.kodpm/pip-packages`, образы в k3d, дампы MinIO в `odoo_backups`, extra-сервисы на `127.0.0.1:<порт>` из `odpm.json`. Локальный образ вроде `autoparts_env:emulator` должен уже быть в Docker на хосте. Только ядро: `kodpm -d odoo up --no-extras`. Снять стек: `kodpm down`.
+What `up` does: clones into `~/projects/kodpm_data`, pip into `.kodpm/pip-packages`, images into k3d, MinIO dumps in `odoo_backups`, extra services on `127.0.0.1:<port>` from `odpm.json`. Extra Deployments are waited for up to 300s, but wait stops early if the remaining pods are in `Error` / `CrashLoopBackOff`. A local-only image such as `autoparts_env:emulator` must already exist in Docker on the host. Core only: `kodpm -d odoo up --no-extras`. Tear down: `kodpm down`.
 
 ---
 
 ## 1. Docker
 
-k3d поднимает Kubernetes внутри Docker.
+k3d runs Kubernetes inside Docker.
 
 ```bash
 sudo apt-get update
@@ -66,25 +68,25 @@ sudo apt-get install -y docker.io
 sudo usermod -aG docker "$USER"
 ```
 
-Выйдите из сессии и войдите снова (или `newgrp docker`), затем:
+Log out and back in (or `newgrp docker`), then:
 
 ```bash
 docker info
 ```
 
-Должен ответить без `permission denied`.
+It must succeed without `permission denied`.
 
 ---
 
-## 2. Python venv и пакет kodpm
+## 2. Python venv and the KODPM package
 
-На Debian/Ubuntu `python3 -m venv` часто падает с `ensurepip is not available`. Ставят пакет venv:
+On Debian/Ubuntu `python3 -m venv` often fails with `ensurepip is not available`. Install the venv package:
 
 ```bash
 sudo apt-get install -y python3.12-venv
 ```
 
-(Для другой версии Python: `python3.11-venv` и т.д.)
+(For another Python: `python3.11-venv`, etc. KODPM needs Python 3.11+.)
 
 ```bash
 cd /home/user/projects/kodpm
@@ -96,32 +98,32 @@ which kodpm
 kodpm --help
 ```
 
-`which kodpm` должен указать на `.../kodpm/.venv/bin/kodpm`. Дальше в этой сессии держите venv включённым (`source .venv/bin/activate`).
+`which kodpm` should print `.../kodpm/.venv/bin/kodpm`. Keep the venv active in that session (`source .venv/bin/activate`).
 
-Если ставите wheel не из клона, задайте `KODPM_HOME` на путь к репозиторию (нужны `catalogs/`, `profiles/`, `charts/`).
+If you install the wheel from outside the clone, set `KODPM_HOME` to the repository path (`catalogs/`, `profiles/`, and `charts/` are required).
 
 ---
 
 ## 3. k3d
 
-В стандартном apt пакета обычно нет. Официальный скрипт:
+Usually not in distro apt. Official installer:
 
 ```bash
 curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 k3d version
 ```
 
-Должна появиться строка с версией k3d и встроенного k3s, например `k3s version v1.35.x-k3s1`.
+You should see a k3d version and the bundled k3s, for example `k3s version v1.35.x-k3s1`.
 
-Документация: <https://k3d.io/>
+Docs: <https://k3d.io/>
 
 ---
 
 ## 4. kubectl
 
-Пакет `kubectl` в обычных репозиториях Ubuntu **не находится** (`E: Невозможно найти пакет kubectl`). `kubectx` — другое, его ставить не нужно.
+The `kubectl` package is **not** in default Ubuntu repos (`Unable to locate package kubectl`). `kubectx` is unrelated; you do not need it.
 
-Бинарник с сайта Kubernetes:
+Binary from Kubernetes:
 
 ```bash
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -130,24 +132,24 @@ sudo mv kubectl /usr/local/bin/kubectl
 kubectl version --client
 ```
 
-На ARM64 замените в URL `amd64` на `arm64`.
+On ARM64 replace `amd64` with `arm64` in the URL.
 
-Альтернатива — официальный apt Kubernetes: <https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/>
+Alternative — official Kubernetes apt: <https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/>
 
 ---
 
 ## 5. Helm 3
 
-В обычном apt пакета `helm` нет (`elm-compiler` — другое).
+Not in default apt (`elm-compiler` is something else).
 
-Официальный скрипт:
+Official script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 helm version
 ```
 
-Вручную:
+Manual:
 
 ```bash
 HELM_VER=v3.16.4
@@ -157,11 +159,11 @@ sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
 helm version
 ```
 
-На ARM64 архив: `linux-arm64`.
+On ARM64 the archive is `linux-arm64`.
 
 ---
 
-## 6. Проверка всего набора
+## 6. Check the toolchain
 
 ```bash
 docker info >/dev/null && echo docker:ok
@@ -173,45 +175,45 @@ source /home/user/projects/kodpm/.venv/bin/activate
 kodpm --help
 ```
 
-Ожидается:
+Expected:
 
-| Команда | Признак успеха |
-|---------|----------------|
-| `docker info` | без ошибки прав |
-| `k3d version` | версия k3d и k3s |
+| Command | Success looks like |
+|---------|-------------------|
+| `docker info` | no permission error |
+| `k3d version` | k3d and k3s versions |
 | `kubectl version --client` | `Client Version: v1.…` |
 | `helm version` | `version.BuildInfo` / `v3.…` |
-| `kodpm --help` | список команд (`cluster`, `up`, `db`, …) |
+| `kodpm --help` | command list (`cluster`, `up`, `db`, …) |
 
-Если `kodpm: command not found` — не активирован `.venv`.
+If you get `kodpm: command not found`, the `.venv` is not activated.
 
 ---
 
-## 7. Локальный кластер
+## 7. Local cluster
 
 ```bash
 source /home/user/projects/kodpm/.venv/bin/activate
 kodpm cluster init
 ```
 
-Создаётся k3d-кластер `kodpm` (`$HOME` монтируется в `/host-home`, порты 80/443 на хосте). Если кластер уже есть, команда его не пересоздаёт; если нода остановлена (после перезагрузки) — запускает. `kodpm -d odoo up` тоже поднимает остановленный кластер. Вручную: `kodpm cluster start`.
+Creates a k3d cluster named `kodpm` (`$HOME` mounted at `/host-home`, host ports 80/443). If the cluster already exists it is not recreated; if the node is stopped (after a reboot) it is started. `kodpm -d odoo up` also starts a stopped cluster. Manually: `kodpm cluster start`.
 
-Проверка:
+Check:
 
 ```bash
 k3d cluster list
 kubectl get nodes
 ```
 
-Нода должна быть `Ready`.
+The node should be `Ready`.
 
 ---
 
-## 8. Новый проект
+## 8. New project
 
-Работать нужно **из каталога проекта** (он должен быть внутри `$HOME`). `--project-dir` не нужен.
+Work **from the project directory** (it must be under `$HOME`). `--project-dir` is not needed.
 
-Нужен SSH-доступ к GitHub (`git@github.com:…`): ключ в `ssh-agent` или `~/.ssh`.
+You need SSH access to Git (`git@github.com:…`): key in `ssh-agent` or `~/.ssh`.
 
 ```bash
 mkdir -p /home/user/projects/fincom_extra
@@ -223,32 +225,32 @@ kodpm -d odoo up
 kodpm -d odoo modules install
 ```
 
-`--init URL` клонирует разрабатываемый репозиторий. Если в клоне есть `odpm.json`, визард не запускается: в корне появляется симлинк `odpm.json` → `<имя>/odpm.json`. В обоих случаях спрашиваются модули для инициализации (`init_modules` в `user_settings.json`, по умолчанию `base,web`). Без URL (`kodpm --init` или `kodpm init`) мастер ещё спросит:
+`--init URL` clones the developing repository. If the clone has `odpm.json`, the version/platform wizard is skipped: the project root gets a symlink `odpm.json` → `<name>/odpm.json`. In both cases KODPM asks for init modules (`init_modules` in `user_settings.json`, default `base,web`). Without a URL (`kodpm --init` or `kodpm init`) the wizard also asks for:
 
-- git-репозитории (первый — developing, остальные — `dependencies` строками);
-- ветку (`--branch` или один общий вопрос);
-- версию ядра (10.0–19.0), если манифеста нет;
-- наименование ядра (`odoo`, `fincomtech`, …);
-- язык БД, пароль.
+- git repositories (first is developing, the rest become `dependencies` strings);
+- branch (`--branch` or one shared prompt);
+- core version (10.0–19.0) if there is no manifest;
+- core name (`odoo`, `fincomtech`, …);
+- database language, password.
 
-Затем:
+Then:
 
-1. Пишется ODPM v2 `odpm.json` (в клон developing + симлинк в корне) либо используется уже существующий манифест. `user_settings.json`, пустой `requirements.txt`, `odoo.conf` (или `{platform}.conf`) и `values.local.yaml` дописываются, если их нет. Старые проекты с `kodpm.json` по-прежнему читаются.
-2. Ядро клонируется в `~/projects/kodpm_data` (для Odoo 17: `https://github.com/odoo/odoo.git`, ветка `17.0` → `~/projects/kodpm_data/odoo-17.0`) и в корне проекта появляется симлинк `odoo`.
-3. Каждый репозиторий addons и `service_sources` клонируется туда же (`~/projects/kodpm_data/<имя>-<ветка>`) и тоже линкуется в корень проекта. Зависимости из `odpm.json` addons (например `OCA/queue`) клонируются так же.
-4. Без `--skip-start` поднимаются кластер k3d (если ещё нет или нода остановлена) и Helm. Extra-сервисы из `scenarios.developer.services` входят в тот же релиз; после `up` kodpm ждёт их Ready (до 300 с) и поднимает `kubectl port-forward` на `127.0.0.1` (останавливает `kodpm down`). В конце `up` печатает URL и подсказку `kodpm -d odoo modules install`.
+1. ODPM v2 `odpm.json` is written into the developing clone (plus a root symlink), or the existing manifest is used. `user_settings.json`, empty `requirements.txt`, `odoo.conf` (or `{platform}.conf`), and `values.local.yaml` are created if missing. Older projects with `kodpm.json` are still read.
+2. The core is cloned into `~/projects/kodpm_data` (Odoo 17: `https://github.com/odoo/odoo.git`, branch `17.0` → `~/projects/kodpm_data/odoo-17.0`) and the project root gets an `odoo` symlink.
+3. Each addon repo and `service_sources` clone goes to the same data dir (`~/projects/kodpm_data/<name>-<branch>`) and is also symlinked in the project root. Nested `odpm.json` dependencies (for example `OCA/queue`) are cloned the same way.
+4. Without `--skip-start`, the k3d cluster is created or started and Helm runs. Extra services from `scenarios.developer.services` join the same release; after `up`, KODPM waits for them (up to 300s, earlier if they are in Error/CrashLoop) and starts `kubectl port-forward` on `127.0.0.1` (`kodpm down` stops those forwards). At the end of `up` it prints the URL and `kodpm -d odoo modules install`.
 
-`odoo.conf` — исходник настроек Odoo (уходит в ConfigMap). В него же попадают `scenarios.developer.odoo_conf.options` из `odpm.json` addons, если ключа ещё нет (например `server_wide_modules`). `values.local.yaml` — overlay Helm только этого проекта; чарта kodpm сюда не копируется. Пакеты Python ставятся из `odpm.json` addons (`scenarios.developer.requirements`); файлы `requirements.txt` не читаются.
+`odoo.conf` is the Odoo settings source (it goes into a ConfigMap). Addon `scenarios.developer.odoo_conf.options` are merged in when the key is not already set (for example `server_wide_modules`). `values.local.yaml` is a Helm overlay for this project only; the KODPM chart is not copied here. Python packages come from addon `odpm.json` (`scenarios.developer.requirements`); project-root `requirements.txt` files are not read.
 
-Каталог клонов можно сменить: `export KODPM_DATA_DIR=/path/to/data`.
+Clone directory override: `export KODPM_DATA_DIR=/path/to/data`.
 
-Только файлы, без Helm:
+Files only, no Helm:
 
 ```bash
 kodpm --init --skip-start
 kodpm init --no-up --no-clone
 ```
 
-UI (имя из каталога проекта): <http://fincom-extra.127.0.0.1.nip.io>
+UI (from the project directory name `fincom_extra`): <http://fincom-extra.127.0.0.1.nip.io>
 
-Дальше: [README_RU.md](README_RU.md), [docs/odpm-mapping.md](docs/odpm-mapping.md).
+Next: [README.md](README.md), [docs/odpm-mapping.md](docs/odpm-mapping.md).

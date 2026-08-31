@@ -14,8 +14,16 @@ from kodpm.project import ProjectFiles
 from kodpm.secrets import kodpm_dir
 
 WAIT_TIMEOUT_SEC = 300
+WAIT_POLL_SEC = 15
 FORWARD_RETRIES = 8
 FORWARD_RETRY_SEC = 3
+STUCK_REASONS = {
+    "Error",
+    "CrashLoopBackOff",
+    "ImagePullBackOff",
+    "ErrImagePull",
+    "ErrImageNeverPull",
+}
 
 
 def forwards_dir(project: ProjectFiles) -> Path:
@@ -57,6 +65,14 @@ def stop_extra_port_forwards(project: ProjectFiles) -> None:
         pid_path.unlink(missing_ok=True)
 
 
+def extras_are_stuck(statuses: dict[str, dict[str, Any]]) -> bool:
+    """True when every extra that is not Ready has a terminal pod reason."""
+    pending = [item for item in statuses.values() if not item.get("ready")]
+    if not pending:
+        return False
+    return all(str(item.get("reason") or "") in STUCK_REASONS for item in pending)
+
+
 def wait_extra_deployments(
     namespace: str,
     release: str,
@@ -68,22 +84,42 @@ def wait_extra_deployments(
     names = [f"deploy/{release}-{item.get('name')}" for item in extras if item.get("name")]
     if not names:
         return True
-    log(f"  ожидание extra-сервисов ({len(names)}, до {timeout}s); прогресс каждые ~15 с")
+    log(
+        f"  ожидание extra-сервисов ({len(names)}, до {timeout}s, "
+        "раньше если Error/CrashLoop); прогресс каждые ~15 с"
+    )
 
     def _wait():
-        return run(
-            [
-                "kubectl",
-                "wait",
-                *names,
-                "-n",
-                namespace,
-                "--for=condition=available",
-                f"--timeout={timeout}s",
-            ],
-            check=False,
-            capture=True,
-        )
+        class Result:
+            returncode = 1
+
+        last = Result()
+        deadline = time.monotonic() + timeout
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return last
+            slice_t = min(WAIT_POLL_SEC, max(1, int(left)))
+            last = run(
+                [
+                    "kubectl",
+                    "wait",
+                    *names,
+                    "-n",
+                    namespace,
+                    "--for=condition=available",
+                    f"--timeout={slice_t}s",
+                ],
+                check=False,
+                capture=True,
+            )
+            if last.returncode == 0:
+                return last
+            if extras_are_stuck(extra_pod_status(namespace, release, extras)):
+                log("  оставшиеся extra в Error/CrashLoop — дальше не ждём")
+                return last
+            if time.monotonic() >= deadline:
+                return last
 
     result = run_while_showing_progress(
         _wait,
@@ -93,7 +129,7 @@ def wait_extra_deployments(
         include_logs=False,
         hide_prefixes=core_pod_prefixes(release),
     )
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         log("  не все extra-сервисы Ready — пробуем port-forward по тем, что уже бегут")
         return False
     return True

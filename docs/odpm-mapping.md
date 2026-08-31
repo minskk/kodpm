@@ -1,13 +1,13 @@
-# Mapping ODPM → kodpm
+# Mapping ODPM → KODPM
 
-kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm). Docker Compose is replaced by Helm on Kubernetes.
+KODPM reads the same project files as [ODPM](https://github.com/aayartsev/odpm). Docker Compose is replaced by Helm on Kubernetes.
 
 ## Files
 
-| ODPM | kodpm |
+| ODPM | KODPM |
 |------|--------|
 | Developing-repo `odpm.json` (file or workspace symlink) | Source of version, platform, git, addons, extra services |
-| `kodpm.json` in the project root | Fallback for older kodpm projects |
+| `kodpm.json` in the project root | Fallback for older KODPM projects |
 | `user_settings.json` (or `usersettings.json`) | Modules, admin password, `dev_mode` |
 | Addon `odpm.json` → `dependencies` | Extra git addons (e.g. `OCA/queue`) cloned and mounted like project deps |
 | Addon `odpm.json` → `scenarios.developer.requirements` | Extra pip packages installed on `up` / module jobs (`requirements.txt` is ignored) |
@@ -19,7 +19,7 @@ kodpm reads the same project files as [ODPM](https://github.com/aayartsev/odpm).
 | `docker-compose.yml` (generated) | Chart `charts/odoo-instance` |
 | `--init` clone + Dockerfile | `kodpm --init URL` + `kodpm -d NAME up` (images from catalog or `image` in json) |
 
-Workspace root `odpm.json` is a **symlink** to `<developing>/odpm.json` after `kodpm --init URL`. kodpm does not write a separate `kodpm.json` when the v2 manifest is complete.
+Workspace root `odpm.json` is a **symlink** to `<developing>/odpm.json` after `kodpm --init URL`. KODPM does not write a separate `kodpm.json` when the v2 manifest is complete.
 
 ## `odpm.json` (ODPM v2)
 
@@ -51,7 +51,7 @@ Substitutions:
 - `${@service:db1}` → `{{release}}-db1`
 - `${@source:NAME}` → hostPath of the clone from `service_sources`
 
-Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`). Other paths are skipped with a warning. On local `up`, kodpm starts a stopped k3d cluster if needed, pulls extra/core images on the host, and imports them into the node via `ctr` (`docker image inspect` / `docker pull` from `hooks.post_prepare` are honored; other hook commands are skipped). After `up` it waits up to 300s for extra Deployments and starts `kubectl port-forward` so extra ports from `odpm.json` listen on `127.0.0.1` (`kodpm down` stops them). Helm `--wait` applies only to Odoo/Postgres/MinIO; extra services are applied without waiting. Skip extras with `--no-extras`.
+Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`). Other paths are skipped with a warning. On local `up`, KODPM starts a stopped k3d cluster if needed, pulls extra/core images on the host, and imports them into the node via `ctr` (`docker image inspect` / `docker pull` from `hooks.post_prepare` are honored; other hook commands are skipped). After `up` it waits up to 300s for extra Deployments and starts `kubectl port-forward` so extra ports from `odpm.json` listen on `127.0.0.1` (`kodpm down` stops them). Helm `--wait` applies only to Odoo/Postgres/MinIO; extra services are applied without waiting. Skip extras with `--no-extras`.
 
 ## `user_settings.json`
 
@@ -67,7 +67,7 @@ Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`).
 
 ## CLI
 
-| ODPM | kodpm |
+| ODPM | KODPM |
 |------|--------|
 | `odpm --init URL --branch X` | `kodpm --init URL --branch X` |
 | `odpm --init` | `kodpm --init` (wizard; first repo is developing) |

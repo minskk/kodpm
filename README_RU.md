@@ -1,10 +1,10 @@
-# kodpm
+# KODPM
 
 Kubernetes-среда для **Odoo Community 10–19** и переименованных форков (например Fincomtech). Та же идея, что у [ODPM](https://github.com/aayartsev/odpm): одно описание проекта (`odpm.json` + `user_settings.json`; у старых проектов ещё может быть `kodpm.json`), CLI для дампов и установки/обновления модулей. Вместо Docker Compose — Helm в Kubernetes.
 
 Профили: **local** (k3d), **test**, **dev**.
 
-English: [README.md](README.md). Пошаговая установка пакетов: **[INSTALL.md](INSTALL.md)**.
+English: [README.md](README.md). Установка: **[INSTALL_RU.md](INSTALL_RU.md)** ([English](INSTALL.md)).
 
 ## Требования
 
@@ -27,7 +27,7 @@ pip install -e ".[dev]"
 
 ## Новый проект (из каталога проекта)
 
-kodpm считает **текущий каталог** проектом. `--project-dir` указывать не нужно.
+KODPM считает **текущий каталог** проектом. `--project-dir` указывать не нужно.
 
 ```bash
 mkdir ~/projects/fincom_extra && cd ~/projects/fincom_extra
@@ -49,13 +49,13 @@ kodpm -d odoo modules install
 
 `kodpm -d odoo up` **не создаёт** кластер, но запускает остановленный. После `up` печатает URL UI и, если есть extra, port-forward на `127.0.0.1` плюс `Дальше: kodpm -d odoo modules install`.
 
-Из `odpm.json` addons: вложенные git `dependencies`, pip (`scenarios.developer.requirements`, не `requirements.txt`), опции `odoo.conf`, extra-сервисы (`${@service:odoo}` / `${@source:NAME}`). Ключи API — в `.kodpm/secrets.json`; kodpm пишет `*/data/secret.xml` и монтирует `/run/odpm/secrets.json`. Старые проекты с `kodpm.json` продолжают работать.
+Из `odpm.json` addons: вложенные git `dependencies`, pip (`scenarios.developer.requirements`, не `requirements.txt`), опции `odoo.conf`, extra-сервисы (`${@service:odoo}` / `${@source:NAME}`). Ключи API — в `.kodpm/secrets.json`; KODPM пишет `*/data/secret.xml` и монтирует `/run/odpm/secrets.json`. Старые проекты с `kodpm.json` продолжают работать.
 
 На local MinIO пишет дампы в `{проект}/odoo_backups` (каталог `kodpm-dumps/`). pip ставится на хосте (Docker + образ Odoo) в `{проект}/.kodpm/pip-packages`. `up` качает образы на хосте и импортирует в k3d (`ctr`). Локальный тег вроде `autoparts_env:emulator` должен уже быть в Docker.
 
 UI: `http://<имя-каталога-проекта>.127.0.0.1.nip.io` — пароль менеджера БД из `user_settings.json`.
 
-`--project-dir` нужен, только если запускаете kodpm из другого каталога. Демо:
+`--project-dir` нужен, только если запускаете KODPM из другого каталога. Демо:
 
 ```bash
 cd /path/to/kodpm/examples/demo-17
@@ -86,7 +86,7 @@ kodpm exec -- [odoo args...]
 
 Необязательные глобальные флаги: `--project-dir` (по умолчанию `.`), `--profile`, `-d DATABASE`, `--init`, `--branch`, `-i`, `-u`, `--skip-start`, `--no-extras`.
 
-Установка и обновление модулей — **`--stop-after-init` в Kubernetes Job**, не на работающем Deployment. После install/update kodpm снова печатает URL UI.
+Установка и обновление модулей — **`--stop-after-init` в Kubernetes Job**, не на работающем Deployment. После install/update KODPM снова печатает URL UI.
 
 ## Структура
 
@@ -101,7 +101,8 @@ docs/
 
 ## Документация
 
-- [Установка (Debian/Ubuntu)](INSTALL.md)
+- [Установка (Debian/Ubuntu)](INSTALL_RU.md)
+- [Install](INSTALL.md)
 - [Соответствие полей ODPM](docs/odpm-mapping.md)
 - [Профили](docs/profiles.md)
 - [Форки](docs/forks.md)

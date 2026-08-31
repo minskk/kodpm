@@ -1,6 +1,7 @@
 from kodpm.portforward import (
     extra_forward_specs,
     extra_launch_summary_lines,
+    extras_are_stuck,
     parse_extra_pod_status,
     stop_extra_port_forwards,
     wait_extra_deployments,
@@ -53,6 +54,52 @@ def test_wait_extra_deployments_one_kubectl(monkeypatch):
     assert ok is True
     assert calls[0][:3] == ["kubectl", "wait", "deploy/app-mailpit"]
     assert "deploy/app-db1" in calls[0]
+    assert "--timeout=15s" in calls[0]
+
+
+def test_extras_are_stuck_on_crashloop():
+    assert extras_are_stuck(
+        {
+            "mailpit": {"ready": True, "reason": "Running"},
+            "emu": {"ready": False, "reason": "CrashLoopBackOff"},
+        }
+    )
+    assert not extras_are_stuck(
+        {
+            "mailpit": {"ready": True, "reason": "Running"},
+            "emu": {"ready": False, "reason": "ContainerCreating"},
+        }
+    )
+
+
+def test_wait_stops_when_extras_stuck(monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 1
+        stdout = ""
+
+    monkeypatch.setattr(
+        "kodpm.portforward.run_while_showing_progress",
+        lambda work, **kwargs: work(),
+    )
+    monkeypatch.setattr(
+        "kodpm.portforward.run",
+        lambda args, **kwargs: calls.append(list(args)) or Result(),
+    )
+    monkeypatch.setattr(
+        "kodpm.portforward.extra_pod_status",
+        lambda *args, **kwargs: {"mailpit": {"ready": False, "reason": "Error"}},
+    )
+    ok = wait_extra_deployments(
+        "kodpm",
+        "app",
+        [{"name": "mailpit"}],
+        timeout=300,
+        log=lambda _msg: None,
+    )
+    assert ok is False
+    assert len(calls) == 1
 
 
 def test_parse_extra_pod_status_ready_and_waiting():
