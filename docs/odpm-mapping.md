@@ -51,7 +51,7 @@ Substitutions:
 - `${@service:db1}` → `{{release}}-db1`
 - `${@source:NAME}` → hostPath of the clone from `service_sources`
 
-Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`). Other paths are skipped with a warning. On local `up`, kodpm pulls extra/core images on the host and imports them into k3d via `ctr` (`docker image inspect` / `docker pull` from `hooks.post_prepare` are honored; other hook commands are skipped). After `up` it starts `kubectl port-forward` so extra ports from `odpm.json` listen on `127.0.0.1` (`kodpm down` stops them). Helm `--wait` applies only to Odoo/Postgres/MinIO; extra services are applied without waiting. Skip extras with `--no-extras`.
+Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`). Other paths are skipped with a warning. On local `up`, kodpm starts a stopped k3d cluster if needed, pulls extra/core images on the host, and imports them into the node via `ctr` (`docker image inspect` / `docker pull` from `hooks.post_prepare` are honored; other hook commands are skipped). After `up` it waits up to 300s for extra Deployments and starts `kubectl port-forward` so extra ports from `odpm.json` listen on `127.0.0.1` (`kodpm down` stops them). Helm `--wait` applies only to Odoo/Postgres/MinIO; extra services are applied without waiting. Skip extras with `--no-extras`.
 
 ## `user_settings.json`
 
@@ -82,4 +82,4 @@ Volumes are mounted only when the host path is under `$HOME` (k3d `/host-home`).
 | `--get-dbs-list` | `kodpm db list` |
 | `--odoo-bin …` | `kodpm exec -- …` |
 
-`kodpm cluster init` is unrelated to `--init`.
+`kodpm cluster init` is unrelated to `--init`. `kodpm cluster start` (and `up`) start a stopped cluster; they do not create one.
