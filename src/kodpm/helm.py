@@ -30,7 +30,7 @@ def helm_upgrade(
     ]
     if wait:
         args.append("--wait")
-    run(args)
+    run(args, capture=True)
 
 
 def helm_uninstall(release: str, namespace: str) -> None:

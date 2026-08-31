@@ -4,6 +4,7 @@ from kodpm.images import (
     collect_up_images,
     extra_service_images,
     images_from_docker_hooks,
+    import_image_to_node,
     node_has_image,
 )
 from kodpm.initproj import build_user_settings, write_project_files
@@ -71,3 +72,53 @@ def test_node_has_image_parses_crictl(monkeypatch):
     monkeypatch.setattr("kodpm.images.run", lambda *args, **kwargs: Result())
     assert node_has_image("k3d-kodpm-server-0", "odoo:17")
     assert not node_has_image("k3d-kodpm-server-0", "postgres:13")
+
+
+def test_import_treats_sigpipe_as_success_when_ctr_ok(monkeypatch):
+    logs: list[str] = []
+    monkeypatch.setattr("kodpm.images.node_has_image", lambda server, image: False)
+    monkeypatch.setattr("kodpm.images.which", lambda name: name)
+    monkeypatch.setattr(
+        "kodpm.images._import_via_pipe",
+        lambda server, image: (141, 0, "", ""),
+    )
+    import_image_to_node("k3d-kodpm-server-0", "odoo:17", log=logs.append)
+    assert any("импорт odoo:17" in line for line in logs)
+    assert not any("повтор" in line for line in logs)
+
+
+def test_import_falls_back_to_tar(monkeypatch):
+    logs: list[str] = []
+    called: list[str] = []
+    monkeypatch.setattr("kodpm.images.node_has_image", lambda server, image: False)
+    monkeypatch.setattr("kodpm.images.which", lambda name: name)
+    monkeypatch.setattr(
+        "kodpm.images._import_via_pipe",
+        lambda server, image: (1, 1, "", "broken pipe"),
+    )
+    monkeypatch.setattr("kodpm.images._import_via_tar", lambda server, image: called.append(f"{server}:{image}"))
+    import_image_to_node("k3d-kodpm-server-0", "odoo:17", log=logs.append)
+    assert called == ["k3d-kodpm-server-0:odoo:17"]
+    assert any("повтор импорта" in line for line in logs)
+
+
+def test_import_stops_when_node_not_running(monkeypatch):
+    from kodpm.proc import ToolError
+
+    monkeypatch.setattr("kodpm.images.node_has_image", lambda server, image: False)
+    monkeypatch.setattr("kodpm.images.which", lambda name: name)
+    monkeypatch.setattr(
+        "kodpm.images._import_via_pipe",
+        lambda server, image: (
+            -13,
+            1,
+            "",
+            "Error response from daemon: container abc is not running",
+        ),
+    )
+    try:
+        import_image_to_node("k3d-kodpm-server-0", "odoo:17", log=lambda _msg: None)
+    except ToolError as exc:
+        assert "cluster start" in str(exc)
+    else:
+        raise AssertionError("expected ToolError")

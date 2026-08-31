@@ -26,6 +26,40 @@ def cluster_exists(name: str = DEFAULT_CLUSTER) -> bool:
     return False
 
 
+def cluster_running(name: str = DEFAULT_CLUSTER) -> bool:
+    result = run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"label=k3d.cluster={name}",
+            "--filter",
+            "label=k3d.role=server",
+            "--format",
+            "{{.Names}}",
+        ],
+        capture=True,
+        check=False,
+    )
+    return bool((result.stdout or "").strip())
+
+
+def start_cluster(name: str = DEFAULT_CLUSTER) -> None:
+    run(["k3d", "cluster", "start", name])
+
+
+def ensure_cluster(name: str = DEFAULT_CLUSTER, *, log=print) -> None:
+    """Start the k3d cluster if it exists but the server container is stopped."""
+    if not cluster_exists(name):
+        raise ToolError(f"кластер k3d {name} не найден. Сначала: kodpm cluster init")
+    if cluster_running(name):
+        return
+    log(f"кластер k3d {name} остановлен — запускаю…")
+    start_cluster(name)
+    if not cluster_running(name):
+        raise ToolError(f"не удалось запустить кластер k3d {name}")
+
+
 def init_cluster(
     name: str = DEFAULT_CLUSTER,
     *,
@@ -33,6 +67,8 @@ def init_cluster(
     api_port: str = "6550",
 ) -> None:
     if cluster_exists(name):
+        if not cluster_running(name):
+            start_cluster(name)
         return
     host_home = (host_home or Path.home()).resolve()
     args = [

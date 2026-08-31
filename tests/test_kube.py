@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from kodpm.kube import (
     _filter_pod_table,
     _replace_progress_block,
+    core_workloads_ready,
     delete_release_jobs,
     run_while_showing_progress,
     scale_odoo,
@@ -119,6 +120,60 @@ def test_filter_pod_table_hides_core():
     assert "odoo" not in filtered
     assert "postgres" not in filtered
     assert "minio" not in filtered
+
+
+def test_core_workloads_ready():
+    ready = (
+        "NAME READY STATUS\n"
+        "app-odoo-1 1/1 Running\n"
+        "app-postgres-0 1/1 Running\n"
+        "app-minio-1 1/1 Running\n"
+        "app-mailpit-1 0/1 ContainerCreating\n"
+    )
+    assert core_workloads_ready(ready, "app") is True
+    starting = (
+        "NAME READY STATUS\n"
+        "app-odoo-1 0/1 Init:0/2\n"
+        "app-postgres-0 1/1 Running\n"
+        "app-minio-1 1/1 Running\n"
+    )
+    assert core_workloads_ready(starting, "app") is False
+    no_minio = (
+        "NAME READY STATUS\n"
+        "app-odoo-1 1/1 Running\n"
+        "app-postgres-0 1/1 Running\n"
+    )
+    assert core_workloads_ready(no_minio, "app") is True
+
+
+def test_run_while_showing_progress_skips_when_core_ready(monkeypatch):
+    lines: list[str] = []
+
+    def fake_kubectl(*args: str, **kwargs):
+        if args[:2] == ("get", "pods"):
+            return SimpleNamespace(
+                stdout=(
+                    "NAME READY STATUS\n"
+                    "app-odoo-1 1/1 Running\n"
+                    "app-postgres-0 1/1 Running\n"
+                    "app-minio-1 1/1 Running\n"
+                    "app-mailpit-1 0/1 Pending\n"
+                ),
+                stderr="",
+            )
+        return SimpleNamespace(stdout="", stderr="")
+
+    monkeypatch.setattr("kodpm.kube.kubectl", fake_kubectl)
+    run_while_showing_progress(
+        lambda: None,
+        namespace="kodpm",
+        release="app",
+        log=lines.append,
+        interval=0.01,
+        tty=False,
+        skip_when_core_ready=True,
+    )
+    assert lines == []
 
 
 def test_replace_progress_block_overwrites():

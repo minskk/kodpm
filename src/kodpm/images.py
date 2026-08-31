@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
+import threading
+from pathlib import Path
 from typing import Any, Callable
 
-from kodpm.cluster import DEFAULT_CLUSTER, cluster_exists
+from kodpm.cluster import DEFAULT_CLUSTER, cluster_exists, ensure_cluster
 from kodpm.hostpip import odoo_image_of
 from kodpm.proc import ToolError, run, which
 from kodpm.project import ProjectFiles
@@ -94,7 +97,6 @@ def k3d_server_names(cluster: str = DEFAULT_CLUSTER) -> list[str]:
         [
             "docker",
             "ps",
-            "-a",
             "--filter",
             f"label=k3d.cluster={cluster}",
             "--filter",
@@ -106,7 +108,7 @@ def k3d_server_names(cluster: str = DEFAULT_CLUSTER) -> list[str]:
         check=False,
     )
     names = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
-    return names or [f"k3d-{cluster}-server-0"]
+    return names
 
 
 def host_has_image(image: str) -> bool:
@@ -160,12 +162,15 @@ def pull_host_image(image: str, *, log: Callable[[str], None]) -> None:
         )
 
 
-def import_image_to_node(server: str, image: str, *, log: Callable[[str], None]) -> None:
-    if node_has_image(server, image):
-        log(f"образ {image} уже есть в {server}")
-        return
-    log(f"импорт {image} → {server} (ctr)")
-    which("docker")
+def _decode(blob: bytes | str | None) -> str:
+    if blob is None:
+        return ""
+    if isinstance(blob, str):
+        return blob.strip()
+    return blob.decode("utf-8", "replace").strip()
+
+
+def _import_via_pipe(server: str, image: str) -> tuple[int | None, int | None, str, str]:
     saver = subprocess.Popen(
         ["docker", "save", image],
         stdout=subprocess.PIPE,
@@ -177,19 +182,63 @@ def import_image_to_node(server: str, image: str, *, log: Callable[[str], None])
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    save_err_box: list[bytes] = []
+
+    def _drain_save_err() -> None:
+        if saver.stderr:
+            save_err_box.append(saver.stderr.read() or b"")
+
+    drain = threading.Thread(target=_drain_save_err)
+    drain.start()
     if saver.stdout:
         saver.stdout.close()
     _out, load_err = loader.communicate()
-    _save_out, save_err = saver.communicate()
-    if saver.returncode != 0:
+    drain.join()
+    saver.wait()
+    return saver.returncode, loader.returncode, _decode(save_err_box[0] if save_err_box else b""), _decode(load_err)
+
+
+def _import_via_tar(server: str, image: str) -> None:
+    with tempfile.NamedTemporaryFile(prefix="kodpm-img-", suffix=".tar", delete=False) as tmp:
+        tar_path = Path(tmp.name)
+    try:
+        saved = run(["docker", "save", "-o", str(tar_path), image], capture=True, check=False)
+        if saved.returncode != 0:
+            detail = (saved.stderr or saved.stdout or "").strip() or f"код {saved.returncode}"
+            raise ToolError(f"docker save {image} не удался: {detail}")
+        with tar_path.open("rb") as fh:
+            loaded = subprocess.run(
+                ["docker", "exec", "-i", server, "ctr", "-n", "k8s.io", "images", "import", "-"],
+                stdin=fh,
+                capture_output=True,
+            )
+        if loaded.returncode != 0:
+            detail = _decode(loaded.stderr or loaded.stdout) or f"код {loaded.returncode}"
+            raise ToolError(f"Не удалось импортировать {image} в {server}. {detail}")
+    finally:
+        tar_path.unlink(missing_ok=True)
+
+
+def import_image_to_node(server: str, image: str, *, log: Callable[[str], None]) -> None:
+    if node_has_image(server, image):
+        log(f"образ {image} уже есть в {server}")
+        return
+    log(f"импорт {image} → {server} (ctr)")
+    which("docker")
+    save_code, load_code, save_err, load_err = _import_via_pipe(server, image)
+    combined = f"{load_err} {save_err}"
+    if "is not running" in combined:
         raise ToolError(
-            f"docker save {image} не удался: {(save_err or b'').decode('utf-8', 'replace')}"
+            f"нода {server} не запущена. Сначала: kodpm cluster start  или  kodpm cluster init"
         )
-    if loader.returncode != 0:
-        raise ToolError(
-            f"Не удалось импортировать {image} в {server}. "
-            f"{(load_err or b'').decode('utf-8', 'replace').strip()}"
-        )
+    if load_code == 0:
+        return
+    log(f"повтор импорта {image} через tar (pipe: save={save_code} load={load_code})")
+    try:
+        _import_via_tar(server, image)
+    except ToolError as exc:
+        pipe_detail = load_err or save_err or f"save={save_code} load={load_code}"
+        raise ToolError(f"{exc} (сначала pipe: {pipe_detail})") from exc
 
 
 def ensure_cluster_images(
@@ -210,6 +259,10 @@ def ensure_cluster_images(
         log(f"кластер k3d {cluster} не найден — импорт образов пропущен")
         return images
     servers = k3d_server_names(cluster)
+    if not servers:
+        raise ToolError(
+            f"нода k3d {cluster} не запущена. Сначала: kodpm cluster start  или  kodpm cluster init"
+        )
     log(f"Образы для k3d ({len(images)}): {', '.join(images)}")
     for image in images:
         pull_host_image(image, log=log)

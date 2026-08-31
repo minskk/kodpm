@@ -9,7 +9,7 @@ import click
 import yaml
 
 from kodpm import __version__
-from kodpm.cluster import DEFAULT_CLUSTER, delete_cluster, init_cluster, require_k3d
+from kodpm.cluster import DEFAULT_CLUSTER, delete_cluster, ensure_cluster, init_cluster, require_k3d
 from kodpm.cmutil import apply_configmap_data, get_configmap_data
 from kodpm.helm import helm_status, helm_template, helm_uninstall, helm_upgrade
 from kodpm.iniutil import get_ini_option, set_ini_option
@@ -173,6 +173,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
     if ctx.obj["profile"] == "local" and not dry_run:
         install_host_pip(_project(ctx), values, log=click.echo)
         click.echo("Образы Docker → k3d…")
+        ensure_cluster(log=click.echo)
         ensure_cluster_images(
             _project(ctx),
             values,
@@ -226,6 +227,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
                 namespace=namespace,
                 release=release,
                 log=click.echo,
+                skip_when_core_ready=True,
             )
         else:
             _helm()
@@ -344,6 +346,15 @@ def cluster_init(name: str, host_home: Path | None, api_port: str) -> None:
     click.echo(f"Creating k3d cluster {name} (or reusing if it exists)...")
     init_cluster(name, host_home=host_home, api_port=api_port)
     click.echo("Cluster is ready. Next: cd <project> && kodpm up")
+
+
+@cluster.command("start")
+@click.option("--name", default=DEFAULT_CLUSTER, show_default=True)
+def cluster_start(name: str) -> None:
+    """Start an existing stopped k3d cluster."""
+    require_k3d()
+    ensure_cluster(name, log=click.echo)
+    click.echo(f"Cluster {name} is running.")
 
 
 @cluster.command("delete")

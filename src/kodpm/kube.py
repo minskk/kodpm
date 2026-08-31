@@ -113,6 +113,29 @@ def _filter_pod_table(table: str, hide_prefixes: tuple[str, ...]) -> str:
     return "\n".join([header, *kept]) if kept else header
 
 
+def core_workloads_ready(table: str, release: str) -> bool:
+    """True when Odoo and Postgres (and MinIO, if present) are Running 1/1."""
+    odoo = postgres = minio = None
+    prefix_odoo = f"{release}-odoo"
+    prefix_pg = f"{release}-postgres"
+    prefix_minio = f"{release}-minio"
+    for row in table.splitlines()[1:]:
+        parts = row.split()
+        if len(parts) < 3:
+            continue
+        name, ready, status = parts[0], parts[1], parts[2]
+        ok = status == "Running" and ready.startswith("1/")
+        if name.startswith(prefix_odoo):
+            odoo = bool(odoo) or ok
+        elif name.startswith(prefix_pg):
+            postgres = bool(postgres) or ok
+        elif name.startswith(prefix_minio):
+            minio = bool(minio) or ok
+    if odoo is not True or postgres is not True:
+        return False
+    return minio is not False
+
+
 def odoo_container_tail(namespace: str, release: str, container: str, *, tail: int = 8) -> str:
     result = kubectl(
         "logs",
@@ -175,11 +198,12 @@ def run_while_showing_progress(
     tty: bool | None = None,
     include_logs: bool = True,
     hide_prefixes: tuple[str, ...] = (),
+    skip_when_core_ready: bool = False,
 ) -> Any:
     """Run `work` and print pod / init-container progress until it finishes.
 
-    First snapshot is skipped (core Odoo/Postgres/MinIO are expected). After that
-    the block is redrawn on a TTY; otherwise new snapshots append.
+    First snapshot is skipped. Helm progress also skips once Odoo/Postgres/MinIO
+    are Ready (extra-сервисы показываются отдельным ожиданием).
     """
     done = threading.Event()
     box: dict[str, Any] = {}
@@ -202,6 +226,12 @@ def run_while_showing_progress(
     def snapshot() -> None:
         nonlocal last_text, printed_lines
         table = pods_status(namespace, release, hide_prefixes=hide_prefixes)
+        if skip_when_core_ready and core_workloads_ready(table, release):
+            if use_tty and printed_lines:
+                stream.write("\033[1A\033[2K" * printed_lines)
+                stream.flush()
+                printed_lines = 0
+            return
         container = ""
         snippet = ""
         if include_logs:
