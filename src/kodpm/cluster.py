@@ -26,13 +26,13 @@ def cluster_exists(name: str = DEFAULT_CLUSTER) -> bool:
     return False
 
 
-def cluster_running(name: str = DEFAULT_CLUSTER) -> bool:
+def k3d_server_names(cluster: str = DEFAULT_CLUSTER) -> list[str]:
     result = run(
         [
             "docker",
             "ps",
             "--filter",
-            f"label=k3d.cluster={name}",
+            f"label=k3d.cluster={cluster}",
             "--filter",
             "label=k3d.role=server",
             "--format",
@@ -41,7 +41,11 @@ def cluster_running(name: str = DEFAULT_CLUSTER) -> bool:
         capture=True,
         check=False,
     )
-    return bool((result.stdout or "").strip())
+    return [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+
+
+def cluster_running(name: str = DEFAULT_CLUSTER) -> bool:
+    return bool(k3d_server_names(name))
 
 
 def start_cluster(name: str = DEFAULT_CLUSTER) -> None:

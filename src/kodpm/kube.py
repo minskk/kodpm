@@ -136,6 +136,10 @@ def core_workloads_ready(table: str, release: str) -> bool:
     return minio is not False
 
 
+def core_pod_prefixes(release: str) -> tuple[str, ...]:
+    return (f"{release}-odoo", f"{release}-postgres", f"{release}-minio")
+
+
 def odoo_container_tail(namespace: str, release: str, container: str, *, tail: int = 8) -> str:
     result = kubectl(
         "logs",

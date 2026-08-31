@@ -6,10 +6,12 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from kodpm.cluster import DEFAULT_CLUSTER, cluster_exists, ensure_cluster
+from kodpm.cluster import DEFAULT_CLUSTER, cluster_exists, k3d_server_names
 from kodpm.hostpip import odoo_image_of
 from kodpm.proc import ToolError, run, which
 from kodpm.project import ProjectFiles
+
+CTR_IMPORT = ["ctr", "-n", "k8s.io", "images", "import", "-"]
 
 
 def post_prepare_commands(project: ProjectFiles) -> list[list[str]]:
@@ -92,25 +94,6 @@ def collect_up_images(
     return images, leftover
 
 
-def k3d_server_names(cluster: str = DEFAULT_CLUSTER) -> list[str]:
-    result = run(
-        [
-            "docker",
-            "ps",
-            "--filter",
-            f"label=k3d.cluster={cluster}",
-            "--filter",
-            "label=k3d.role=server",
-            "--format",
-            "{{.Names}}",
-        ],
-        capture=True,
-        check=False,
-    )
-    names = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
-    return names
-
-
 def host_has_image(image: str) -> bool:
     result = run(["docker", "image", "inspect", image], capture=True, check=False)
     return result.returncode == 0
@@ -177,7 +160,7 @@ def _import_via_pipe(server: str, image: str) -> tuple[int | None, int | None, s
         stderr=subprocess.PIPE,
     )
     loader = subprocess.Popen(
-        ["docker", "exec", "-i", server, "ctr", "-n", "k8s.io", "images", "import", "-"],
+        ["docker", "exec", "-i", server, *CTR_IMPORT],
         stdin=saver.stdout,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -208,7 +191,7 @@ def _import_via_tar(server: str, image: str) -> None:
             raise ToolError(f"docker save {image} не удался: {detail}")
         with tar_path.open("rb") as fh:
             loaded = subprocess.run(
-                ["docker", "exec", "-i", server, "ctr", "-n", "k8s.io", "images", "import", "-"],
+                ["docker", "exec", "-i", server, *CTR_IMPORT],
                 stdin=fh,
                 capture_output=True,
             )

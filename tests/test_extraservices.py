@@ -8,6 +8,7 @@ from kodpm.extraservices import (
     extra_service_warnings,
     interpolate,
     parse_port_pair,
+    parse_volume,
     service_source_repos,
 )
 from kodpm.initproj import build_user_settings, write_project_files
@@ -68,6 +69,14 @@ def _project_with_services(tmp_path: Path, monkeypatch) -> ProjectFiles:
     return ProjectFiles(project_dir)
 
 
+def test_parse_volume_keeps_source_placeholder():
+    assert parse_volume("${@source:digital_autoparts_env}:/env") == (
+        "${@source:digital_autoparts_env}",
+        "/env",
+    )
+    assert parse_volume("./data/mailpit/data:/data") == ("./data/mailpit/data", "/data")
+
+
 def test_parse_port_pair():
     assert parse_port_pair("8025:8025") == (8025, 8025)
     assert parse_port_pair("8510") == (8510, 8510)
@@ -98,6 +107,9 @@ def test_extra_service_values_image_ports_env(tmp_path: Path, monkeypatch):
     assert express["env"]["DB_HOST"] == "app-db1"
     assert express["command"] == ["bash", "-c", "python3 /env/main.py"]
     assert express["volumes"][0]["hostPath"].startswith("/host-home/")
+    assert "digital-autoparts-env" in express["volumes"][0]["hostPath"]
+    assert "${@source" not in express["volumes"][0]["hostPath"]
+    assert express["volumes"][0]["mountPath"] == "/env"
     assert "outside" in services
     assert services["outside"]["volumes"] == []
 

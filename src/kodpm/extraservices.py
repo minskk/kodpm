@@ -84,16 +84,15 @@ def parse_port_pair(raw: Any) -> tuple[int, int] | None:
 
 
 def parse_volume(raw: Any) -> tuple[str, str] | None:
+    """Split host:container. Last colon is the mount path so ${@source:NAME}:/env works."""
     text = str(raw).strip()
-    if not text or text.startswith("/"):
-        parts = text.split(":", 1)
-        if len(parts) != 2:
-            return None
-        return parts[0], parts[1]
-    if ":" not in text:
+    if not text or ":" not in text:
         return None
-    src, dest = text.split(":", 1)
-    return src, dest.split(":")[0]
+    src, dest = text.rsplit(":", 1)
+    dest = dest.split(":")[0]
+    if not src or not dest:
+        return None
+    return src, dest
 
 
 def map_volume_host_path(src: str, project: ProjectFiles) -> str | None:
@@ -130,11 +129,10 @@ def extra_service_values(project: ProjectFiles) -> list[dict[str, Any]]:
             )
         volumes: list[dict[str, str]] = []
         for index, item in enumerate(spec.get("volumes") or []):
-            parsed = parse_volume(item)
+            parsed = parse_volume(interpolate(str(item), project, release))
             if not parsed:
                 continue
             src, dest = parsed
-            src = interpolate(src, project, release)
             mapped = map_volume_host_path(src, project)
             if not mapped:
                 continue
@@ -183,11 +181,10 @@ def extra_service_warnings(project: ProjectFiles) -> list[str]:
         if not isinstance(spec, dict):
             continue
         for item in spec.get("volumes") or []:
-            parsed = parse_volume(item)
+            parsed = parse_volume(interpolate(str(item), project, release))
             if not parsed:
                 continue
             src, _dest = parsed
-            src = interpolate(src, project, release)
             if not map_volume_host_path(src, project):
                 warnings.append(
                     f"volume {item} сервиса {name} пропущен (путь вне $HOME, hostPath недоступен)."

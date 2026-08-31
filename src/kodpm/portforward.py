@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from kodpm.kube import run_while_showing_progress
+from kodpm.kube import core_pod_prefixes, run_while_showing_progress
 from kodpm.proc import run, which
 from kodpm.project import ProjectFiles
 from kodpm.secrets import kodpm_dir
@@ -91,7 +91,7 @@ def wait_extra_deployments(
         release=release,
         log=log,
         include_logs=False,
-        hide_prefixes=(f"{release}-odoo", f"{release}-postgres", f"{release}-minio"),
+        hide_prefixes=core_pod_prefixes(release),
     )
     if result.returncode != 0:
         log("  не все extra-сервисы Ready — пробуем port-forward по тем, что уже бегут")

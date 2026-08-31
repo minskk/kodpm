@@ -146,6 +146,16 @@ _PROFILE_OPTION = click.option(
 )
 
 
+def _is_local_apply(ctx: click.Context, *, dry_run: bool = False) -> bool:
+    return ctx.obj["profile"] == "local" and not dry_run
+
+
+def _echo_ui_url(values: dict[str, Any]) -> None:
+    host = (values.get("ingress") or {}).get("host")
+    if host:
+        click.echo(f"URL: http://{host}")
+
+
 def _ask_init_modules(modules: str | None, *, default: str = "base,web") -> str:
     """Ask for user_settings init_modules on first install; default is base,web."""
     if modules is not None:
@@ -160,17 +170,18 @@ def _ask_init_modules(modules: str | None, *, default: str = "base,web") -> str:
 
 
 def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) -> None:
-    if ctx.obj["profile"] == "local" and not dry_run and not ctx.obj.get("no_clone"):
+    local = _is_local_apply(ctx, dry_run=dry_run)
+    if local and not ctx.obj.get("no_clone"):
         click.echo("Клонирование ядра и addons в kodpm_data…")
         sync_project_sources(
             _project(ctx),
             log=click.echo,
             extra_sources=not ctx.obj.get("no_extras"),
         )
-    if ctx.obj["profile"] == "local" and not dry_run:
+    if local:
         prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _sync_layout(ctx) if not dry_run else _values(ctx)
-    if ctx.obj["profile"] == "local" and not dry_run:
+    if local:
         install_host_pip(_project(ctx), values, log=click.echo)
         click.echo("Образы Docker → k3d…")
         ensure_cluster(log=click.echo)
@@ -231,10 +242,8 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
             err=True,
         )
         raise
-    host = (values.get("ingress") or {}).get("host")
     click.echo(f"Release {release} is installed.")
-    if host:
-        click.echo(f"URL: http://{host}")
+    _echo_ui_url(values)
     if extras:
         click.echo("Extra services on 127.0.0.1 (port-forward к Service):")
         start_extra_port_forwards(
@@ -843,10 +852,10 @@ def modules() -> None:
 
 
 def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
-    if ctx.obj.get("profile") == "local":
+    if _is_local_apply(ctx):
         prepare_addon_secrets(_project(ctx), log=click.echo)
     values = _values(ctx)
-    if ctx.obj.get("profile") == "local":
+    if _is_local_apply(ctx):
         install_host_pip(_project(ctx), values, log=click.echo)
     fullname = _fullname(ctx, values)
     namespace = _ns(ctx, values)
@@ -883,9 +892,7 @@ def _run_modules(ctx: click.Context, action: str, names: str | None) -> None:
     finally:
         scale_odoo(fullname, namespace, int(values.get("replicaCount") or 1))
     click.echo(f"Module {action} finished.")
-    host = (values.get("ingress") or {}).get("host")
-    if host:
-        click.echo(f"URL: http://{host}")
+    _echo_ui_url(values)
 
 
 @modules.command("install")
