@@ -195,16 +195,7 @@ def perform_up(ctx: click.Context, *, dry_run: bool = False, wait: bool = True) 
         click.echo("Extra-сервисы из odpm.json пропущены (--no-extras).")
     click.echo(f"helm upgrade --install {release} (namespace={namespace}, profile={ctx.obj['profile']})")
     if wait:
-        click.echo("Прогресс (блок ниже обновляется на месте каждые ~15 с):")
-        click.echo(f"  kubectl get pods -n {namespace} -l app.kubernetes.io/instance={release} -w")
-        click.echo(
-            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},"
-            f"app.kubernetes.io/component=odoo -c pip-req -f"
-        )
-        click.echo(
-            f"  kubectl logs -n {namespace} -l app.kubernetes.io/instance={release},"
-            f"app.kubernetes.io/component=odoo -c odoo -f"
-        )
+        click.echo("Ожидание Ready ядра: Odoo, Postgres, MinIO (снимок подов каждые ~15 с).")
 
     def _helm() -> None:
         if wait and extras:
