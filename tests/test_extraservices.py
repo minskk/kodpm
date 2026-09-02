@@ -77,6 +77,14 @@ def test_parse_volume_keeps_source_placeholder():
     assert parse_volume("./data/mailpit/data:/data") == ("./data/mailpit/data", "/data")
 
 
+def test_map_volume_rejects_unresolved_placeholder(tmp_path: Path, monkeypatch):
+    from kodpm.extraservices import map_volume_host_path
+
+    project = _project_with_services(tmp_path, monkeypatch)
+    assert map_volume_host_path("${@source", project) is None
+    assert map_volume_host_path("${@source:digital_autoparts_env}", project) is None
+
+
 def test_parse_port_pair():
     assert parse_port_pair("8025:8025") == (8025, 8025)
     assert parse_port_pair("8510") == (8510, 8510)
